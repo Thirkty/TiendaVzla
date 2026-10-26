@@ -68,6 +68,9 @@ export default function ProductCard({ product }: ProductCardProps) {
       </div>
 
       <div className="flex flex-1 flex-col px-2 pb-2 pt-4">
+        {product.seller && (
+          <p className="mb-1 text-xs font-medium text-ink/50">Vendido por {product.seller.storeName}</p>
+        )}
         <h3 className="text-lg font-bold leading-snug">{product.name}</h3>
         <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-ink/60">
           {product.description}

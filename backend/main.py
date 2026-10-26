@@ -8,9 +8,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from database import BCV_AUTO_UPDATE, CORS_ORIGINS, RATE_REFRESH_HOURS, SessionLocal, engine
-from routers import orders, products, rates
+from routers import accounts, admin_sellers, orders, products, rates, seller
+from services.catalog import UPLOAD_PATH
 from services.orders import expire_pending_orders
 from services.rates import refresh_official_rate
 
@@ -65,7 +67,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="TiendaVzla API",
-    description="Backend del e-commerce de dropshipping nacional.",
+    description="Backend del marketplace TiendaVzla: vendedores, catálogo, pedidos y tasa BCV.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -73,14 +75,20 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "PATCH"],
-    allow_headers=["Content-Type", "X-Admin-Key"],
+    allow_credentials=True,  # la sesión viaja en una cookie
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type"],
 )
 
 app.include_router(products.router)
 app.include_router(orders.router)
 app.include_router(rates.router)
+app.include_router(accounts.router)
+app.include_router(seller.router)
+app.include_router(admin_sellers.router)
+
+# Imágenes subidas por los vendedores (en producción conviene servirlas desde un CDN).
+app.mount("/uploads", StaticFiles(directory=UPLOAD_PATH), name="uploads")
 
 
 @app.get("/", tags=["Salud"])

@@ -31,7 +31,7 @@ function formatRate(rate: number): string {
   return `${rate.toLocaleString("es-VE", { maximumFractionDigits: 4 })} Bs/$`;
 }
 
-export default function RateCard({ adminKey }: { adminKey: string }) {
+export default function RateCard() {
   const [status, setStatus] = useState<RateStatus | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -40,11 +40,11 @@ export default function RateCard({ adminKey }: { adminKey: string }) {
 
   const loadStatus = useCallback(async () => {
     try {
-      setStatus(await adminApi.rateStatus(adminKey));
+      setStatus(await adminApi.rateStatus());
     } catch {
       setError("No se pudo cargar la tasa");
     }
-  }, [adminKey]);
+  }, []);
 
   useEffect(() => {
     void loadStatus();
@@ -71,7 +71,7 @@ export default function RateCard({ adminKey }: { adminKey: string }) {
       setError("Escribe una tasa válida, por ejemplo 886,23");
       return;
     }
-    void run(() => adminApi.setRate(adminKey, value));
+    void run(() => adminApi.setRate(value));
   };
 
   const current = status?.current;
@@ -111,7 +111,7 @@ export default function RateCard({ adminKey }: { adminKey: string }) {
           <button
             type="button"
             disabled={busy}
-            onClick={() => void run(() => adminApi.refreshRate(adminKey))}
+            onClick={() => void run(() => adminApi.refreshRate())}
             className="inline-flex items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-sm font-semibold transition hover:bg-line/50 disabled:opacity-50"
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}

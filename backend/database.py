@@ -20,7 +20,15 @@ def _require_env(name: str) -> str:
 # ---------- Configuración ----------
 
 DATABASE_URL = _require_env("DATABASE_URL")
-ADMIN_API_KEY = _require_env("ADMIN_API_KEY")
+
+# Sesiones: la cookie dura SESSION_DAYS días. En producción (HTTPS) COOKIE_SECURE=true.
+SESSION_DAYS = int(os.getenv("SESSION_DAYS", "14"))
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+
+# Imágenes subidas por los vendedores. PUBLIC_API_URL es la dirección pública de esta
+# API, para armar las URLs de las imágenes que ve el navegador.
+PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "http://localhost:8000").rstrip("/")
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 
 CORS_ORIGINS = [
     origin.strip()

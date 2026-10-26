@@ -1,8 +1,9 @@
 "use client";
-// Navbar: barra sticky con logo, enlaces, carrito con badge animado y botón "Mi cuenta".
+// Navbar: barra sticky con logo, enlaces, carrito con badge animado y "Mi cuenta" (login).
 // También rehidrata el carrito guardado en localStorage al montar.
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { ShoppingBag, User } from "lucide-react";
 import { selectTotalItems, useCartStore } from "@/lib/store/cart";
@@ -11,6 +12,7 @@ const NAV_LINKS: ReadonlyArray<{ label: string; href: string }> = [
   { label: "Catálogo", href: "/#catalogo" },
   { label: "Envíos", href: "/#envios" },
   { label: "Contacto", href: "/#contacto" },
+  { label: "Vender", href: "/vender" },
 ];
 
 export default function Navbar() {
@@ -67,13 +69,13 @@ export default function Navbar() {
             )}
           </button>
 
-          <button
-            type="button"
+          <Link
+            href="/entrar"
             className="inline-flex items-center gap-2 rounded-full bg-deep px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-deep/90 sm:px-4"
           >
             <User className="size-4" />
             <span className="hidden sm:inline">Mi cuenta</span>
-          </button>
+          </Link>
         </div>
       </nav>
     </motion.header>

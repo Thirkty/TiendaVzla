@@ -3,6 +3,12 @@
 
 /* ---------- Dominio ---------- */
 
+export interface SellerSummary {
+  id: string;
+  storeName: string;
+  slug: string;
+}
+
 export interface Product {
   id: string;
   slug: string;
@@ -14,6 +20,9 @@ export interface Product {
   originalPriceUsd?: number | null;
   category?: string | null;
   badge?: string | null;
+  /** Costo de envío que define el vendedor (0 = gratis). */
+  shippingCostUsd?: number;
+  seller?: SellerSummary;
 }
 
 export interface CartItem {
@@ -115,6 +124,58 @@ export interface RateStatus {
   businessDaysBehind: number;
   stale: boolean;
   lastCheck: { at: string; ok: boolean; source: string | null; error: string | null } | null;
+}
+
+/* ---------- Cuentas y vendedores ---------- */
+
+export type SellerStatus = "PENDING" | "ACTIVE" | "SUSPENDED";
+
+export interface SellerProfileInput {
+  storeName: string;
+  whatsapp: string;
+  pagoMovilBank: string;
+  pagoMovilPhone: string;
+  pagoMovilId: string;
+}
+
+export interface SellerProfile extends SellerProfileInput {
+  id: string;
+  slug: string;
+  status: SellerStatus;
+  statusNote: string | null;
+  createdAt: string;
+  approvedAt: string | null;
+}
+
+export interface Me {
+  id: string;
+  email: string;
+  isAdmin: boolean;
+  seller: SellerProfile | null;
+}
+
+export interface AdminSeller extends SellerProfile {
+  email: string | null;
+  productsCount: number;
+}
+
+export interface SellerProductInput {
+  name: string;
+  description: string;
+  priceUsd: number;
+  originalPriceUsd: number | null;
+  shippingCostUsd: number;
+  stock: number;
+  imageUrl: string;
+  category: string | null;
+  badge: string | null;
+  isActive: boolean;
+}
+
+export interface SellerProduct extends Product {
+  isActive: boolean;
+  shippingCostUsd: number;
+  updatedAt: string | null;
 }
 
 /* ---------- Estado global (Zustand) ---------- */
