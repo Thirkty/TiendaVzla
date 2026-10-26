@@ -181,8 +181,21 @@ class OrderOut(ApiModel):
     items: list[OrderItemOut]
 
 
+class ShippingOut(ApiModel):
+    """Datos de contacto y envío escritos por el cliente en el pedido."""
+
+    name: str
+    cedula: str
+    phone: str
+    address_state: str
+    address_city: str
+    address_street: str
+    address_reference: str | None = None
+
+
 class AdminOrderOut(OrderOut):
-    customer: CustomerOut
+    shipping: ShippingOut
+    customer: CustomerOut  # cliente vinculado por cédula (datos de su primera compra)
 
 
 class OrderStatusUpdateIn(InputModel):

@@ -100,22 +100,33 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
     bcv_rate = get_current_rate(db).rate
     total_ves = (total_usd * bcv_rate).quantize(CENTS, rounding=ROUND_HALF_UP)
 
-    # 4. Crear o actualizar el cliente (la cédula es la clave única).
+    # 4. Vincular al cliente por cédula. Si ya existe NO se tocan sus datos: cualquiera
+    #    puede escribir una cédula ajena, así que eso no puede cambiar datos de otro.
     data = payload.customer
     customer = db.scalar(select(Customer).where(Customer.cedula == data.cedula))
     if customer is None:
-        customer = Customer(cedula=data.cedula)
+        customer = Customer(
+            cedula=data.cedula,
+            name=data.name,
+            phone=data.phone,
+            address_state=data.address_state,
+            address_city=data.address_city,
+            address_street=data.address_street,
+            address_reference=data.address_reference,
+        )
         db.add(customer)
-    customer.name = data.name
-    customer.phone = data.phone
-    customer.address_state = data.address_state
-    customer.address_city = data.address_city
-    customer.address_street = data.address_street
-    customer.address_reference = data.address_reference
 
     # 5. Crear la orden y descontar stock.
     order = Order(
         customer=customer,
+        # Los datos de este envío se guardan en la orden, tal como los escribió el cliente.
+        shipping_name=data.name,
+        shipping_cedula=data.cedula,
+        shipping_phone=data.phone,
+        shipping_state=data.address_state,
+        shipping_city=data.address_city,
+        shipping_street=data.address_street,
+        shipping_reference=data.address_reference,
         total_usd=total_usd,
         total_ves=total_ves,
         bcv_rate=bcv_rate,

@@ -34,9 +34,12 @@ def update_rate(payload: RateIn, db: Session = Depends(get_db)) -> RateOut:
     "/admin/rate/refresh", response_model=RateOut, dependencies=[Depends(require_admin)]
 )
 def refresh_rate(db: Session = Depends(get_db)) -> RateOut:
-    """Consulta ya mismo la tasa oficial (BCV, con DolarApi de respaldo)."""
+    """Consulta ya mismo la tasa oficial (BCV, con DolarApi de respaldo).
+
+    Si hoy rige una tasa fijada a mano, vuelve a la oficial.
+    """
     try:
-        return RateOut.model_validate(refresh_official_rate(db))
+        return RateOut.model_validate(refresh_official_rate(db, restore_official=True))
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

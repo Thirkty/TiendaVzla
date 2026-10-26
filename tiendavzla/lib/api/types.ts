@@ -80,8 +80,22 @@ export interface AdminCustomer {
   addressReference: string | null;
 }
 
-/** Orden con los datos del cliente (endpoints de admin). */
+/** Datos de contacto y envío escritos por el cliente en un pedido. */
+export interface ShippingInfo {
+  name: string;
+  cedula: string;
+  phone: string;
+  addressState: string;
+  addressCity: string;
+  addressStreet: string;
+  addressReference: string | null;
+}
+
+/** Orden con sus datos de envío (endpoints de admin). */
 export interface AdminOrder extends Order {
+  /** Datos de ESTE pedido: son los que hay que usar para despachar y contactar. */
+  shipping: ShippingInfo;
+  /** Cliente vinculado por cédula (datos de su primera compra). */
   customer: AdminCustomer;
 }
 

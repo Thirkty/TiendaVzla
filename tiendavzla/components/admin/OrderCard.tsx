@@ -34,7 +34,7 @@ export default function OrderCard({ order, onChangeStatus }: OrderCardProps) {
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const { customer } = order;
+  const { shipping } = order;
 
   const change = async (to: OrderStatus, why?: string) => {
     setBusy(to);
@@ -78,25 +78,25 @@ export default function OrderCard({ order, onChangeStatus }: OrderCardProps) {
       </header>
 
       <div className="mt-4 grid gap-5 md:grid-cols-[1fr_1fr_auto]">
-        {/* Cliente */}
+        {/* Contacto y envío de este pedido */}
         <div className="space-y-1 text-sm">
-          <p className="font-semibold">{customer.name}</p>
-          <p className="text-ink/60">{customer.cedula}</p>
+          <p className="font-semibold">{shipping.name}</p>
+          <p className="text-ink/60">{shipping.cedula}</p>
           <a
-            href={whatsappLink(customer.phone)}
+            href={whatsappLink(shipping.phone)}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 font-medium text-deep hover:underline"
           >
             <MessageCircle className="size-4" />
-            {customer.phone}
+            {shipping.phone}
           </a>
           <p className="flex gap-1.5 text-ink/70">
             <MapPin className="mt-0.5 size-4 shrink-0" />
             <span>
-              {customer.addressStreet}, {customer.addressCity}, {customer.addressState}
-              {customer.addressReference && (
-                <span className="block text-ink/50">Ref: {customer.addressReference}</span>
+              {shipping.addressStreet}, {shipping.addressCity}, {shipping.addressState}
+              {shipping.addressReference && (
+                <span className="block text-ink/50">Ref: {shipping.addressReference}</span>
               )}
             </span>
           </p>

@@ -172,7 +172,7 @@ export default function RateCard({ adminKey }: { adminKey: string }) {
             Guardar
           </button>
           <p className="w-full text-xs text-ink/50">
-            Rige desde hoy para los pedidos nuevos, hasta que empiece la próxima tasa del BCV.
+            Rige desde hoy para los pedidos nuevos, hasta que empiece la próxima tasa del BCV. Para volver a la oficial, pulsa “Consultar BCV”.
           </p>
         </form>
       )}
