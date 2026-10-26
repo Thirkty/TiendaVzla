@@ -1,6 +1,7 @@
-// Home: hero + catálogo. Pide los productos a la API y pasa la promesa al grid,
-// que la resuelve con `use()` mientras Suspense muestra el esqueleto.
+// Home: hero editorial con categorías + catálogo. Pide los productos a la API una vez y
+// comparte la promesa: las categorías la resuelven en el servidor y el grid con `use()`.
 import { Suspense } from "react";
+import CategoryWindows, { CategoryWindowsSkeleton } from "@/components/CategoryWindows";
 import HeroSection from "@/components/HeroSection";
 import ProductGrid, { ProductGridSkeleton } from "@/components/ProductGrid";
 import { getProducts } from "@/lib/api/client";
@@ -10,7 +11,11 @@ export default function HomePage() {
 
   return (
     <>
-      <HeroSection />
+      <HeroSection>
+        <Suspense fallback={<CategoryWindowsSkeleton />}>
+          <CategoryWindows productsPromise={productsPromise} />
+        </Suspense>
+      </HeroSection>
 
       <section id="catalogo" className="mx-auto max-w-6xl px-4 pb-24 pt-8 sm:px-6">
         <div className="mb-10 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

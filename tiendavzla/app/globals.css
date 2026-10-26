@@ -3,6 +3,7 @@
 /* Tipografía: la variable --font-jakarta la inyecta next/font en <html>. */
 @theme inline {
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument), ui-serif, Georgia, serif;
 }
 
 /* Paleta de marca (Tailwind v4: genera bg-brand, text-ink, border-line, etc.) */
@@ -15,6 +16,9 @@
   --color-success: #2ec4b6;
   --color-line: #e8e8e3;
   --color-whatsapp: #25d366;
+  /* Gris cálido de fondo para las secciones editoriales (portada, vender) */
+  --color-mist: #ecebe7;
+  --color-mist-dark: #d9d7d0;
 }
 
 html {
@@ -30,4 +34,34 @@ html {
   html {
     scroll-behavior: auto;
   }
+}
+
+/* Entrada suave de la portada (sin JavaScript). */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up {
+    animation: none;
+  }
+}
+
+/* Carruseles horizontales sin barra de scroll visible (siguen siendo desplazables). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
