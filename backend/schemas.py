@@ -5,7 +5,7 @@ directo con los tipos del frontend en Next.js. La entrada acepta camelCase o sna
 """
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 
@@ -200,8 +200,26 @@ class OrderStatusUpdateIn(InputModel):
 class RateOut(ApiModel):
     rate: Money
     source: str
+    valid_from: date
     source_date: datetime | None = None
     updated_at: datetime = Field(validation_alias="created_at")
+
+
+class RateCheckOut(ApiModel):
+    at: datetime
+    ok: bool
+    source: str | None = None
+    error: str | None = None
+
+
+class RateStatusOut(ApiModel):
+    """Estado de la tasa para el panel: vigente, la próxima publicada y si está vieja."""
+
+    current: RateOut
+    upcoming: RateOut | None = None
+    business_days_behind: int
+    stale: bool
+    last_check: RateCheckOut | None = None
 
 
 class RateIn(InputModel):

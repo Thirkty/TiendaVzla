@@ -87,9 +87,20 @@ export interface AdminOrder extends Order {
 
 export interface ExchangeRate {
   rate: number;
-  source: "bcv" | "manual" | "env";
+  source: "bcv" | "dolarapi" | "manual" | "env";
+  /** "Fecha Valor" del BCV (YYYY-MM-DD): desde ese día rige la tasa. */
+  validFrom: string;
   sourceDate: string | null;
   updatedAt: string;
+}
+
+/** Estado de la tasa para el panel de admin (GET /api/admin/rate/status). */
+export interface RateStatus {
+  current: ExchangeRate;
+  upcoming: ExchangeRate | null;
+  businessDaysBehind: number;
+  stale: boolean;
+  lastCheck: { at: string; ok: boolean; source: string | null; error: string | null } | null;
 }
 
 /* ---------- Estado global (Zustand) ---------- */

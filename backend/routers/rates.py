@@ -4,8 +4,16 @@ from sqlalchemy.orm import Session
 
 from auth import require_admin
 from database import get_db
-from schemas import RateIn, RateOut
-from services.rates import get_current_rate, refresh_official_rate, set_rate
+from schemas import RateCheckOut, RateIn, RateOut, RateStatusOut
+from services import rates as rate_service
+from services.rates import (
+    STALE_BUSINESS_DAYS,
+    business_days_behind,
+    get_current_rate,
+    get_upcoming_rate,
+    refresh_official_rate,
+    set_rate,
+)
 
 router = APIRouter(prefix="/api", tags=["Tasa BCV"])
 
@@ -18,7 +26,7 @@ def current_rate(db: Session = Depends(get_db)) -> RateOut:
 
 @router.put("/admin/rate", response_model=RateOut, dependencies=[Depends(require_admin)])
 def update_rate(payload: RateIn, db: Session = Depends(get_db)) -> RateOut:
-    """Fija la tasa a mano. Queda vigente hasta la próxima actualización automática."""
+    """Fija la tasa a mano para hoy. Rige hasta que empiece una tasa con fecha valor posterior."""
     return RateOut.model_validate(set_rate(db, payload.rate, source="manual"))
 
 
@@ -26,8 +34,26 @@ def update_rate(payload: RateIn, db: Session = Depends(get_db)) -> RateOut:
     "/admin/rate/refresh", response_model=RateOut, dependencies=[Depends(require_admin)]
 )
 def refresh_rate(db: Session = Depends(get_db)) -> RateOut:
-    """Consulta ya mismo la tasa oficial del BCV."""
+    """Consulta ya mismo la tasa oficial (BCV, con DolarApi de respaldo)."""
     try:
         return RateOut.model_validate(refresh_official_rate(db))
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get(
+    "/admin/rate/status", response_model=RateStatusOut, dependencies=[Depends(require_admin)]
+)
+def rate_status(db: Session = Depends(get_db)) -> RateStatusOut:
+    """Tasa vigente, la próxima ya publicada y si la vigente está atrasada."""
+    current = get_current_rate(db)
+    upcoming = get_upcoming_rate(db)
+    behind = business_days_behind(current.valid_from)
+    check = rate_service.last_check
+    return RateStatusOut(
+        current=RateOut.model_validate(current),
+        upcoming=RateOut.model_validate(upcoming) if upcoming else None,
+        business_days_behind=behind,
+        stale=behind >= STALE_BUSINESS_DAYS,
+        last_check=RateCheckOut.model_validate(check, from_attributes=True) if check else None,
+    )

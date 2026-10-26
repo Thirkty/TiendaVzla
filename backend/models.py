@@ -1,11 +1,12 @@
 """Modelos de la base de datos (SQLAlchemy 2.0, PostgreSQL)."""
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     Float,
@@ -120,15 +121,17 @@ class OrderItem(Base):
 
 
 class ExchangeRate(Base):
-    """Historial de la tasa BCV. La tasa vigente es la fila más reciente."""
+    """Historial de la tasa BCV. La vigente es la de valid_from más reciente que ya empezó."""
 
     __tablename__ = "exchange_rates"
     __table_args__ = (CheckConstraint("rate > 0", name="ck_exchange_rates_rate_positive"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     rate: Mapped[Decimal] = mapped_column(Numeric(14, 4))
-    source: Mapped[str] = mapped_column(String(20))  # "bcv" (automática), "manual" o "env"
-    # Fecha de publicación de la tasa según la fuente (None si es manual).
+    source: Mapped[str] = mapped_column(String(20))  # "bcv", "dolarapi", "manual" o "env"
+    # "Fecha Valor" del BCV: el día (hora de Venezuela) desde el que rige esta tasa.
+    valid_from: Mapped[date] = mapped_column(Date, index=True)
+    # Fecha de publicación según la fuente, si la informa (solo DolarApi).
     source_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True

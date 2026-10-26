@@ -1,7 +1,7 @@
 // Cliente de los endpoints de administración. Todas las llamadas llevan el header
 // X-Admin-Key con la clave que el admin escribe al entrar a /admin.
 import { API_URL } from "./client";
-import type { AdminOrder, ExchangeRate, OrderStatus } from "./types";
+import type { AdminOrder, ExchangeRate, OrderStatus, RateStatus } from "./types";
 
 const KEY_STORAGE = "tiendavzla-admin-key";
 
@@ -65,6 +65,8 @@ export const adminApi = {
       method: "PATCH",
       body: { status, ...(reason && { reason }) },
     }),
+
+  rateStatus: (key: string) => adminFetch<RateStatus>(key, "/api/admin/rate/status"),
 
   setRate: (key: string, rate: number) =>
     adminFetch<ExchangeRate>(key, "/api/admin/rate", { method: "PUT", body: { rate } }),
