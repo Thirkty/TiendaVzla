@@ -1,7 +1,7 @@
 "use client";
-// PagoMovilStep: un pago por vendedor. Cada tarjeta muestra el monto exacto en Bs. y el
-// Pago Móvil de ESE vendedor, y envía su referencia con POST /api/orders/{id}/pay.
-// Cada vendedor verifica su pago en su banco. Arriba se ve cuánto tiempo queda para pagar.
+// PagoMovilStep: el monto exacto en Bs., los datos de Pago Móvil de la tienda y el campo
+// de la referencia (POST /api/orders/{id}/pay). Arriba se ve cuánto tiempo queda para pagar.
+// Soporta varias órdenes (una por tienda), aunque hoy la tienda es una sola.
 
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
@@ -30,8 +30,8 @@ export default function PagoMovilStep({ orders, onUpdated, onExpired }: PagoMovi
         <Clock className="mx-auto size-12 text-brand" strokeWidth={1.5} />
         <h2 className="mt-3 text-xl font-bold">Se acabó el tiempo para pagar</h2>
         <p className="mt-2 text-ink/60">
-          Liberamos los productos que no se pagaron. Si ya hiciste un Pago Móvil, escríbele al
-          vendedor por WhatsApp con la referencia.
+          Liberamos los productos que no se pagaron. Si ya hiciste el Pago Móvil, escríbenos por
+          WhatsApp con la referencia.
         </p>
         <button
           type="button"
@@ -50,13 +50,13 @@ export default function PagoMovilStep({ orders, onUpdated, onExpired }: PagoMovi
         <div className="flex items-center gap-2 text-sm font-medium text-white/70">
           <Smartphone className="size-4" />
           {orders.length > 1
-            ? `Total de tu compra · ${orders.length} pagos, uno por vendedor`
+            ? `Total de tu compra · ${orders.length} pagos, uno por tienda`
             : "Monto a pagar por Pago Móvil"}
         </div>
         <p className="mt-2 text-4xl font-extrabold tabular-nums">{formatBs(totalVes)}</p>
         {orders.length > 1 && (
           <p className="mt-1 text-sm text-white/60">
-            Cada vendedor recibe su pago directo; haz un Pago Móvil a cada uno.
+            Haz un Pago Móvil por cada tienda.
           </p>
         )}
         {remaining !== null && pending.length > 0 && (
@@ -78,7 +78,7 @@ export default function PagoMovilStep({ orders, onUpdated, onExpired }: PagoMovi
       ))}
 
       <p className="text-center text-xs text-ink/50">
-        Cada vendedor verifica su pago en el banco antes de despachar.
+        Verificamos cada pago en el banco antes de despachar.
       </p>
     </div>
   );
@@ -131,7 +131,7 @@ function SellerPaymentCard({
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line p-5">
         <div>
           {step && <p className="text-xs font-semibold uppercase tracking-wider text-brand">{step}</p>}
-          <h2 className="text-lg font-bold">{seller.storeName}</h2>
+          <h2 className="text-lg font-bold">{step ? seller.storeName : "Tu pedido"}</h2>
           <p className="text-sm text-ink/60">
             {order.items.map((i) => `${i.quantity}× ${i.product.name}`).join(" · ")}
           </p>
@@ -152,7 +152,7 @@ function SellerPaymentCard({
       {submitted ? (
         <p className="flex items-center gap-2 bg-success/10 px-5 py-4 text-sm font-medium text-deep">
           <CircleCheck className="size-5 text-success" />
-          Referencia {order.paymentReference} enviada. {seller.storeName} la está verificando.
+          Referencia {order.paymentReference} enviada. La estamos verificando.
         </p>
       ) : (
         <div className="grid gap-5 p-5 sm:grid-cols-2">

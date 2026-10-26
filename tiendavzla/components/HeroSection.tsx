@@ -7,7 +7,7 @@ import { ArrowDown, ShieldCheck, Smartphone, Truck } from "lucide-react";
 const PERKS = [
   { icon: Truck, label: "Envíos a toda Venezuela" },
   { icon: Smartphone, label: "Pagas por Pago Móvil" },
-  { icon: ShieldCheck, label: "Tiendas verificadas" },
+  { icon: ShieldCheck, label: "Compra segura" },
 ] as const;
 
 export default function HeroSection({ children }: { children?: ReactNode }) {
@@ -15,7 +15,7 @@ export default function HeroSection({ children }: { children?: ReactNode }) {
     <section className="relative overflow-hidden bg-mist">
       <div className="mx-auto max-w-6xl px-4 pt-14 sm:px-6 sm:pt-20">
         <p className="fade-up text-xs font-semibold uppercase tracking-[0.2em] text-ink/50">
-          Marketplace venezolano
+          Tienda venezolana
         </p>
         <h1 className="fade-up mt-4 max-w-4xl text-[2.6rem] font-bold leading-[1.02] tracking-tight [animation-delay:80ms] sm:text-7xl">
           Lo que necesitas,{" "}
@@ -26,8 +26,8 @@ export default function HeroSection({ children }: { children?: ReactNode }) {
 
         <div className="fade-up mt-6 flex flex-col gap-6 [animation-delay:160ms] sm:flex-row sm:items-end sm:justify-between">
           <p className="max-w-md text-lg leading-relaxed text-ink/65">
-            Productos útiles de tiendas venezolanas verificadas. Precios claros en dólares y
-            bolívares, y pagas directo al vendedor.
+            Productos útiles para tu casa y tu rutina. Precios claros en dólares y bolívares, y
+            pagas fácil por Pago Móvil.
           </p>
           <a
             href="#catalogo"

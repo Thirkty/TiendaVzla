@@ -1,14 +1,15 @@
-// Endpoints de administración. Usan la sesión del admin (cookie); si no hay sesión la
-// API responde 401 y si la cuenta no es admin, 403.
+// Endpoints del panel de admin: pedidos, productos, configuración y tasa. Usan la sesión
+// del admin (cookie); sin sesión la API responde 401 y si la cuenta no es admin, 403.
 import type { StatusChangeExtra } from "@/lib/orderStatus";
 import { sessionFetch } from "./session";
 import type {
   AdminOrder,
-  AdminSeller,
+  AdminProduct,
   ExchangeRate,
   OrderStatus,
+  ProductInput,
   RateStatus,
-  SellerStatus,
+  StoreSettings,
 } from "./types";
 
 export type OrdersSummary = Record<OrderStatus, number>;
@@ -32,12 +33,23 @@ export const adminApi = {
 
   refreshRate: () => sessionFetch<ExchangeRate>("/api/admin/rate/refresh", { method: "POST" }),
 
-  sellers: (status?: SellerStatus) =>
-    sessionFetch<AdminSeller[]>(`/api/admin/sellers${status ? `?status=${status}` : ""}`),
+  store: () => sessionFetch<StoreSettings>("/api/admin/store"),
+  updateStore: (data: StoreSettings) =>
+    sessionFetch<StoreSettings>("/api/admin/store", { method: "PUT", json: data }),
 
-  updateSellerStatus: (sellerId: string, status: SellerStatus, note?: string) =>
-    sessionFetch<AdminSeller>(`/api/admin/sellers/${encodeURIComponent(sellerId)}/status`, {
+  products: () => sessionFetch<AdminProduct[]>("/api/admin/products"),
+  createProduct: (data: ProductInput) =>
+    sessionFetch<AdminProduct>("/api/admin/products", { json: data }),
+  updateProduct: (id: string, data: Partial<ProductInput>) =>
+    sessionFetch<AdminProduct>(`/api/admin/products/${encodeURIComponent(id)}`, {
       method: "PATCH",
-      json: { status, ...(note && { note }) },
+      json: data,
     }),
+
+  /** Sube una foto; la API la valida, la achica y devuelve su URL. */
+  uploadImage: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return sessionFetch<{ url: string }>("/api/admin/uploads", { form });
+  },
 };

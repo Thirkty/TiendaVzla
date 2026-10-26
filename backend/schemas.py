@@ -20,7 +20,7 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 
-from models import OrderStatus, SellerStatus
+from models import OrderStatus
 
 # Los Decimal se envían como número en el JSON (no como string).
 Money = Annotated[Decimal, PlainSerializer(float, return_type=float, when_used="json")]
@@ -312,8 +312,8 @@ class LoginIn(InputModel):
     password: Annotated[str, StringConstraints(min_length=1, max_length=128)]
 
 
-class SellerProfileIn(InputModel):
-    """Datos de la tienda (registro y edición)."""
+class StoreSettingsIn(InputModel):
+    """Configuración de la tienda: nombre, WhatsApp y Pago Móvil donde se cobra."""
 
     store_name: Annotated[CleanStr, StringConstraints(min_length=3, max_length=80)]
     whatsapp: VePhone
@@ -322,43 +322,21 @@ class SellerProfileIn(InputModel):
     pago_movil_id: Cedula
 
 
-class SellerRegisterIn(SellerProfileIn):
-    email: Email
-    password: Password
-
-
-class SellerOut(ApiModel):
-    id: uuid.UUID
+class StoreSettingsOut(ApiModel):
     store_name: str
-    slug: str
     whatsapp: str
     pago_movil_bank: str
     pago_movil_phone: str
     pago_movil_id: str
-    status: SellerStatus
-    status_note: str | None = None
-    created_at: datetime
-    approved_at: datetime | None = None
 
 
 class MeOut(ApiModel):
     id: uuid.UUID
     email: str
     is_admin: bool
-    seller: SellerOut | None = None
 
 
-class AdminSellerOut(SellerOut):
-    email: str | None = None
-    products_count: int = 0
-
-
-class SellerStatusIn(InputModel):
-    status: SellerStatus
-    note: Annotated[CleanStr, StringConstraints(max_length=200)] | None = None
-
-
-# ---------- Productos del vendedor ----------
+# ---------- Productos (admin) ----------
 
 
 class SellerProductIn(InputModel):

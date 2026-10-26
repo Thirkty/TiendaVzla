@@ -1,4 +1,4 @@
-"""Endpoints del checkout (un pedido por vendedor), envío de la referencia de pago y
+"""Endpoints del checkout, envío de la referencia de pago y
 administración de órdenes."""
 import uuid
 from collections import defaultdict
@@ -238,7 +238,7 @@ def submit_payment(
 ) -> OrderOut:
     """El cliente envía la referencia del Pago Móvil: PENDING -> PAYMENT_SUBMITTED.
 
-    El pago NO queda confirmado: el vendedor lo verifica en su banco y lo aprueba.
+    El pago NO queda confirmado: la tienda lo verifica en el banco y lo aprueba (desde /admin).
     """
     order = lock_order(db, order_id)
     if order is None:
@@ -312,8 +312,7 @@ def update_order_status(
     payload: OrderStatusUpdateIn,
     db: DbSession,
 ) -> AdminOrderOut:
-    """Cambia el estado de cualquier orden (soporte y disputas), con las mismas reglas
-    que el vendedor."""
+    """Aprueba o rechaza el pago, prepara, despacha (agencia y guía), entrega o cancela."""
     order = lock_order(db, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada")

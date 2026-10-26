@@ -122,13 +122,16 @@ export default function CartDrawer() {
               </div>
             ) : (
               <>
-                {/* Items agrupados por vendedor: cada grupo es un pedido y un pago aparte */}
+                {/* Items agrupados por tienda. Hoy hay una sola; si algún día hay varias,
+                    cada grupo es un pedido y un pago aparte y se muestra su nombre. */}
                 <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
                   {groups.map((group) => (
                     <section key={group.seller.id}>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink/50">
-                        {group.seller.storeName}
-                      </p>
+                      {groups.length > 1 && (
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink/50">
+                          {group.seller.storeName}
+                        </p>
+                      )}
                       <ul className="space-y-3">
                         <AnimatePresence initial={false}>
                           {group.items.map(({ product, quantity }) => (
@@ -254,8 +257,8 @@ export default function CartDrawer() {
                   </motion.button>
                   <p className="mt-3 text-center text-xs text-ink/50">
                     {groups.length > 1
-                      ? `${groups.length} vendedores · un Pago Móvil a cada uno`
-                      : "Pagas por Pago Móvil directo al vendedor"}
+                      ? `${groups.length} tiendas · un Pago Móvil a cada una`
+                      : "Pagas fácil por Pago Móvil"}
                   </p>
                 </footer>
               </>
