@@ -3,8 +3,9 @@
 // referencia del Pago Móvil, despacho (agencia y guía) y botones para el siguiente estado.
 
 import { useState, type FormEvent } from "react";
-import { Loader2, MapPin, MessageCircle, Truck } from "lucide-react";
-import type { OrderStatus, SellerOrder } from "@/lib/api/types";
+import { Check, Loader2, MapPin, MessageCircle, PackageSearch, Truck } from "lucide-react";
+import { adminApi } from "@/lib/api/admin";
+import type { AdminOrder, OrderStatus, SupplierRequest } from "@/lib/api/types";
 import {
   CARRIERS,
   STATUS_ACTIONS,
@@ -16,8 +17,8 @@ import {
 import { formatBs, formatUsd } from "@/lib/utils/format";
 
 interface OrderCardProps {
-  order: SellerOrder;
-  onChangeStatus: (order: SellerOrder, to: OrderStatus, extra?: StatusChangeExtra) => Promise<void>;
+  order: AdminOrder;
+  onChangeStatus: (order: AdminOrder, to: OrderStatus, extra?: StatusChangeExtra) => Promise<void>;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("es-VE", {
@@ -165,8 +166,21 @@ export default function OrderCard({ order, onChangeStatus }: OrderCardProps) {
           {order.status === "CANCELLED" && order.cancelReason && (
             <p className="mt-2 text-xs text-ink/60">Motivo: {order.cancelReason}</p>
           )}
+          {order.status !== "CANCELLED" && (
+            <p className="mt-2 border-t border-line pt-2 text-xs">
+              {order.profitUsd !== null && order.costUsd !== null ? (
+                <span className={order.profitUsd >= 0 ? "text-deep" : "text-brand-dark"}>
+                  Costo {formatUsd(order.costUsd)} · <span className="font-bold">ganas {formatUsd(order.profitUsd)}</span>
+                </span>
+              ) : (
+                <span className="text-ink/50">Sin costo cargado en algún producto</span>
+              )}
+            </p>
+          )}
         </div>
       </div>
+
+      {SUPPLIER_STATUSES.has(order.status) && <SupplierRequestPanel order={order} />}
 
       {STATUS_ACTIONS[order.status].length > 0 && (
         <footer className="mt-4 border-t border-line pt-4">
@@ -272,5 +286,99 @@ function BackButton({ onClick }: { onClick: () => void }) {
     >
       Volver
     </button>
+  );
+}
+
+/** Estados en los que tiene sentido pedirle la mercancía al proveedor. */
+const SUPPLIER_STATUSES = new Set<OrderStatus>(["PAID", "PROCESSING"]);
+
+/** Pedir la mercancía al proveedor: abre WhatsApp con el mensaje armado y marca el pedido. */
+function SupplierRequestPanel({ order }: { order: AdminOrder }) {
+  const [request, setRequest] = useState<SupplierRequest | null>(null);
+  const [requestedAt, setRequestedAt] = useState(order.supplierRequestedAt);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const open = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setRequest(await adminApi.supplierRequest(order.id));
+    } catch {
+      setError("No se pudo armar el mensaje.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markRequested = async () => {
+    try {
+      setRequestedAt((await adminApi.markSupplierRequested(order.id)).supplierRequestedAt);
+    } catch {
+      setError("No se pudo marcar como pedido.");
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-xl bg-deep/5 p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-2 font-semibold text-deep">
+          <PackageSearch className="size-4" />
+          {requestedAt
+            ? `Pedido al proveedor el ${dateFormatter.format(new Date(requestedAt))}`
+            : "Falta pedirle la mercancía al proveedor"}
+        </p>
+        {!request && (
+          <button
+            type="button"
+            onClick={() => void open()}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-deep/20 bg-white px-3 py-1.5 font-semibold text-deep transition hover:bg-deep/10 disabled:opacity-50"
+          >
+            {loading && <Loader2 className="size-4 animate-spin" />}
+            {requestedAt ? "Ver mensaje" : "Pedir al proveedor"}
+          </button>
+        )}
+      </div>
+
+      {request && (
+        <div className="mt-3 space-y-3">
+          {request.missingSupplier.length > 0 && (
+            <p className="text-brand-dark">
+              Sin proveedor asignado: {request.missingSupplier.join(", ")}. Asígnalo en Productos.
+            </p>
+          )}
+          {request.messages.map((m) => (
+            <div key={m.supplier.id} className="rounded-lg bg-white p-3">
+              <p className="font-semibold">{m.supplier.name}</p>
+              <pre className="mt-1 whitespace-pre-wrap font-sans text-xs text-ink/70">{m.message}</pre>
+              <a
+                href={m.whatsappUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => {
+                  if (!requestedAt) void markRequested();
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-whatsapp px-3 py-1.5 font-semibold text-white transition hover:opacity-90"
+              >
+                <MessageCircle className="size-4" />
+                Enviar por WhatsApp
+              </a>
+            </div>
+          ))}
+          {!requestedAt && request.messages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void markRequested()}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-deep hover:underline"
+            >
+              <Check className="size-3.5" />
+              Ya lo pedí por otro medio
+            </button>
+          )}
+        </div>
+      )}
+      {error && <p className="mt-2 text-brand-dark">{error}</p>}
+    </div>
   );
 }

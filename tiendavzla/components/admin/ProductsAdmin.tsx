@@ -76,6 +76,15 @@ export default function ProductsAdmin({ onApiError }: { onApiError: (err: unknow
                   · envío {p.shippingCostUsd > 0 ? formatUsd(p.shippingCostUsd) : "gratis"}
                 </span>
               </p>
+              <p className="text-xs">
+                {p.costUsd !== null ? (
+                  <span className={p.priceUsd - p.costUsd >= 0 ? "text-deep" : "text-brand-dark"}>
+                    Costo {formatUsd(p.costUsd)} · margen {Math.round(((p.priceUsd - p.costUsd) / p.priceUsd) * 100)}%
+                  </span>
+                ) : (
+                  <span className="text-brand-dark">Sin proveedor ni costo</span>
+                )}
+              </p>
               <div className="mt-auto flex items-center justify-between pt-1">
                 <span className={`text-xs font-medium ${p.stock === 0 ? "text-brand-dark" : "text-ink/50"}`}>
                   {p.isActive ? (p.stock === 0 ? "Agotado" : `${p.stock} disponibles`) : "Oculto"}

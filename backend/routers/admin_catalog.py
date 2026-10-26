@@ -9,11 +9,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from auth import require_admin
 from database import get_db
-from models import Product, Seller
+from models import Product, ProductSupplier, Seller
 from schemas import (
     SellerProductIn,
     SellerProductOut,
@@ -68,7 +68,10 @@ def update_store_settings(payload: StoreSettingsIn, store: Store, db: DbSession)
 def list_products(store: Store, db: DbSession) -> list[SellerProductOut]:
     """Todos los productos, publicados u ocultos."""
     products = db.scalars(
-        select(Product).where(Product.seller_id == store.id).order_by(Product.created_at.desc())
+        select(Product)
+        .where(Product.seller_id == store.id)
+        .options(selectinload(Product.offers).selectinload(ProductSupplier.supplier))
+        .order_by(Product.created_at.desc())
     ).all()
     return [SellerProductOut.model_validate(p) for p in products]
 

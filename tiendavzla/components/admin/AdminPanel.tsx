@@ -1,7 +1,8 @@
 "use client";
 // AdminPanel: requiere sesión de admin. Tres secciones:
 //   - Pedidos: tasa BCV y pedidos por estado ("Por verificar" es el trabajo diario).
-//   - Productos: alta y edición del catálogo, con fotos.
+//   - Productos: alta y edición del catálogo, con fotos, proveedores y costo.
+//   - Proveedores: a quién se le compra cada producto (se le pide por WhatsApp).
 //   - Configuración: nombre, WhatsApp y Pago Móvil de la tienda.
 // Los pedidos se refrescan solos cada 30 segundos.
 
@@ -9,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, ShieldAlert } from "lucide-react";
 import { adminApi, type OrdersSummary } from "@/lib/api/admin";
 import { SessionApiError } from "@/lib/api/session";
-import type { AdminOrder, OrderStatus, SellerOrder } from "@/lib/api/types";
+import type { AdminOrder, OrderStatus } from "@/lib/api/types";
 import type { StatusChangeExtra } from "@/lib/orderStatus";
 import { STATUS_LABEL, STATUS_TABS } from "@/lib/orderStatus";
 import PanelHeader from "@/components/panel/PanelHeader";
@@ -17,11 +18,13 @@ import { useRequireSession } from "@/components/panel/useRequireSession";
 import OrderCard from "@/components/orders/OrderCard";
 import RateCard from "./RateCard";
 import ProductsAdmin from "./ProductsAdmin";
+import SalesSummaryCard from "./SalesSummaryCard";
+import SuppliersAdmin from "./SuppliersAdmin";
 import StoreSettingsForm from "./StoreSettingsForm";
 
 const REFRESH_MS = 30_000;
 
-type Section = "orders" | "products" | "settings";
+type Section = "orders" | "products" | "suppliers" | "settings";
 
 export default function AdminPanel() {
   const { me, error, reload, logout } = useRequireSession();
@@ -58,6 +61,7 @@ export default function AdminPanel() {
             [
               ["orders", "Pedidos"],
               ["products", "Productos"],
+              ["suppliers", "Proveedores"],
               ["settings", "Configuración"],
             ] as const
           ).map(([key, label]) => (
@@ -78,6 +82,7 @@ export default function AdminPanel() {
         <div className="mt-6">
           {section === "orders" && <OrdersSection onApiError={onApiError} />}
           {section === "products" && <ProductsAdmin onApiError={onApiError} />}
+          {section === "suppliers" && <SuppliersAdmin onApiError={onApiError} />}
           {section === "settings" && <StoreSettingsForm onApiError={onApiError} />}
         </div>
       </div>
@@ -114,7 +119,7 @@ function OrdersSection({ onApiError }: { onApiError: (err: unknown) => void }) {
     return () => clearInterval(id);
   }, [load]);
 
-  const changeStatus = async (order: SellerOrder, to: OrderStatus, extra?: StatusChangeExtra) => {
+  const changeStatus = async (order: AdminOrder, to: OrderStatus, extra?: StatusChangeExtra) => {
     try {
       await adminApi.updateStatus(order.id, to, extra);
     } catch (err) {
@@ -128,7 +133,10 @@ function OrdersSection({ onApiError }: { onApiError: (err: unknown) => void }) {
 
   return (
     <>
-      <RateCard />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SalesSummaryCard />
+        <RateCard />
+      </div>
 
       <div className="mt-8 flex items-center justify-between gap-3">
         <nav aria-label="Estados de los pedidos" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">

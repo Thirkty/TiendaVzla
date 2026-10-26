@@ -16,6 +16,7 @@ from pydantic import (
     Field,
     PlainSerializer,
     StringConstraints,
+    computed_field,
     field_validator,
 )
 from pydantic.alias_generators import to_camel
@@ -241,14 +242,52 @@ class ShippingOut(ApiModel):
     address_reference: str | None = None
 
 
-class SellerOrderOut(OrderOut):
-    """Lo que ve el vendedor: datos de envío del pedido (no la ficha del cliente)."""
+class SupplierSummary(ApiModel):
+    id: uuid.UUID
+    name: str
+    whatsapp: str
 
-    shipping: ShippingOut
+
+class AdminOrderItemOut(OrderItemOut):
+    """Item con costo y proveedor: SOLO para el admin (el cliente nunca ve el costo)."""
+
+    cost_at_purchase: Money | None = None
+    supplier: SupplierSummary | None = None
 
 
-class AdminOrderOut(SellerOrderOut):
+class AdminOrderOut(OrderOut):
+    shipping: ShippingOut  # datos de envío de ESTE pedido
     customer: CustomerOut  # cliente vinculado por cédula (datos de su primera compra)
+    items: list[AdminOrderItemOut]
+    supplier_requested_at: datetime | None = None
+
+    @computed_field
+    @property
+    def cost_usd(self) -> Money | None:
+        """Costo de la mercancía del pedido; None si a algún item le falta el costo."""
+        if any(i.cost_at_purchase is None for i in self.items):
+            return None
+        return sum((i.cost_at_purchase * i.quantity for i in self.items), Decimal("0"))
+
+    @computed_field
+    @property
+    def profit_usd(self) -> Money | None:
+        """Ganancia = productos cobrados - costo (el envío cobrado se asume para el envío)."""
+        cost = self.cost_usd
+        return None if cost is None else self.subtotal_usd - cost
+
+
+class SupplierMessageOut(ApiModel):
+    """Mensaje de WhatsApp listo para pedirle a un proveedor los items de un pedido."""
+
+    supplier: SupplierSummary
+    message: str
+    whatsapp_url: str
+
+
+class SupplierRequestOut(ApiModel):
+    messages: list[SupplierMessageOut]
+    missing_supplier: list[str]  # productos del pedido sin proveedor asignado
 
 
 class OrderStatusUpdateIn(InputModel):
@@ -367,9 +406,82 @@ class SellerProductPatch(InputModel):
     is_active: bool | None = None
 
 
+class OfferOut(ApiModel):
+    """Un proveedor que tiene el producto, con su costo."""
+
+    id: uuid.UUID
+    supplier: SupplierSummary
+    cost_usd: Money
+    supplier_sku: str | None = None
+    is_preferred: bool
+
+
 class SellerProductOut(ProductOut):
     is_active: bool
     updated_at: datetime | None = None
+    offers: list[OfferOut] = []
+
+    @computed_field
+    @property
+    def cost_usd(self) -> Money | None:
+        """Costo con el proveedor preferido (o el más barato si no hay preferido)."""
+        if not self.offers:
+            return None
+        preferred = [o for o in self.offers if o.is_preferred]
+        return (preferred[0] if preferred else min(self.offers, key=lambda o: o.cost_usd)).cost_usd
+
+
+class OfferIn(InputModel):
+    supplier_id: uuid.UUID
+    cost_usd: Decimal = Field(ge=0, le=Decimal("1000000"), decimal_places=2)
+    supplier_sku: Annotated[CleanStr, StringConstraints(max_length=80)] | None = None
+    is_preferred: bool = False
+
+
+class ProductOffersIn(InputModel):
+    """Lista completa de proveedores del producto (reemplaza la anterior)."""
+
+    offers: list[OfferIn] = Field(max_length=20)
+
+
+# ---------- Proveedores ----------
+
+
+class SupplierIn(InputModel):
+    name: Annotated[CleanStr, StringConstraints(min_length=2, max_length=120)]
+    whatsapp: VePhone
+    contact_name: Annotated[CleanStr, StringConstraints(max_length=120)] | None = None
+    notes: Annotated[CleanStr, StringConstraints(max_length=2000)] | None = None
+    dispatch_days: int | None = Field(default=None, ge=0, le=90)
+    is_active: bool = True
+
+
+class SupplierOut(ApiModel):
+    id: uuid.UUID
+    name: str
+    whatsapp: str
+    contact_name: str | None = None
+    notes: str | None = None
+    dispatch_days: int | None = None
+    is_active: bool
+    created_at: datetime
+    products_count: int = 0
+
+
+# ---------- Reportes ----------
+
+
+class SalesSummaryOut(ApiModel):
+    """Resumen de ventas de pedidos pagados (PAID en adelante, sin cancelados)."""
+
+    days: int
+    orders: int
+    revenue_usd: Money  # productos cobrados
+    shipping_usd: Money  # envío cobrado
+    cost_usd: Money  # costo de los items con costo conocido
+    profit_usd: Money  # revenue de esos items - su costo
+    margin_pct: float | None  # profit / revenue de los items con costo
+    items_without_cost: int  # unidades vendidas sin costo cargado
 
 
 class UploadOut(ApiModel):

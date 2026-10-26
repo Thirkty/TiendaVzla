@@ -129,9 +129,19 @@ export interface SellerOrder extends Order {
   shipping: ShippingInfo;
 }
 
-/** Orden vista por el admin: además, el cliente vinculado por cédula. */
-export interface AdminOrder extends SellerOrder {
+export interface AdminOrderItem extends OrderItem {
+  costAtPurchase: number | null;
+  supplier: SupplierSummary | null;
+}
+
+/** Orden vista por el admin: cliente, costos, ganancia y pedido al proveedor. */
+export interface AdminOrder extends Omit<SellerOrder, "items"> {
   customer: AdminCustomer;
+  items: AdminOrderItem[];
+  /** Costo de la mercancía; null si a algún item le falta el costo. */
+  costUsd: number | null;
+  profitUsd: number | null;
+  supplierRequestedAt: string | null;
 }
 
 export interface ExchangeRate {
@@ -186,6 +196,67 @@ export interface AdminProduct extends Product {
   isActive: boolean;
   shippingCostUsd: number;
   updatedAt: string | null;
+  offers: Offer[];
+  /** Costo con el proveedor preferido; null si no tiene proveedores cargados. */
+  costUsd: number | null;
+}
+
+/* ---------- Proveedores y reportes (solo admin) ---------- */
+
+export interface SupplierSummary {
+  id: string;
+  name: string;
+  whatsapp: string;
+}
+
+export interface Supplier extends SupplierSummary {
+  contactName: string | null;
+  notes: string | null;
+  dispatchDays: number | null;
+  isActive: boolean;
+  createdAt: string;
+  productsCount: number;
+}
+
+export interface SupplierInput {
+  name: string;
+  whatsapp: string;
+  contactName: string | null;
+  notes: string | null;
+  dispatchDays: number | null;
+  isActive: boolean;
+}
+
+/** Un proveedor que tiene un producto, con su costo. */
+export interface Offer {
+  id: string;
+  supplier: SupplierSummary;
+  costUsd: number;
+  supplierSku: string | null;
+  isPreferred: boolean;
+}
+
+export interface OfferInput {
+  supplierId: string;
+  costUsd: number;
+  supplierSku: string | null;
+  isPreferred: boolean;
+}
+
+export interface SupplierRequest {
+  messages: { supplier: SupplierSummary; message: string; whatsappUrl: string }[];
+  missingSupplier: string[];
+}
+
+export interface SalesSummary {
+  days: number;
+  orders: number;
+  revenueUsd: number;
+  shippingUsd: number;
+  costUsd: number;
+  profitUsd: number;
+  marginPct: number | null;
+  itemsWithoutCost: number;
 }
 
 /* ---------- Estado global (Zustand) ---------- */
