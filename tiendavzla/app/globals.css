@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Tipografía: la variable --font-jakarta la inyecta next/font en <html>. */
+@theme inline {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Paleta de marca (Tailwind v4: genera bg-brand, text-ink, border-line, etc.) */
+@theme {
+  --color-cream: #fafaf7;
+  --color-ink: #1a1a1a;
+  --color-brand: #ff6b35;
+  --color-brand-dark: #e85a26;
+  --color-deep: #004e64;
+  --color-success: #2ec4b6;
+  --color-line: #e8e8e3;
+  --color-whatsapp: #25d366;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem; /* compensa el navbar sticky al usar anclas */
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-brand) 25%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
