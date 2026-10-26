@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -146,6 +147,17 @@ class Product(Base):
     )
 
     seller: Mapped[Seller] = relationship(back_populates="products")
+    offers: Mapped[list["ProductSupplier"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
+
+    @property
+    def preferred_offer(self) -> "ProductSupplier | None":
+        """La oferta del proveedor preferido (o la más barata si ninguna está marcada)."""
+        if not self.offers:
+            return None
+        preferred = [o for o in self.offers if o.is_preferred]
+        return preferred[0] if preferred else min(self.offers, key=lambda o: o.cost_usd)
 
 
 class Customer(Base):
@@ -202,6 +214,8 @@ class Order(Base):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_reason: Mapped[str | None] = mapped_column(String(200))
+    # Cuándo se le pidió la mercancía al proveedor (por WhatsApp desde el panel).
+    supplier_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Despacho: agencia y número de guía que carga el vendedor al enviar.
     carrier: Mapped[str | None] = mapped_column(String(40))
@@ -263,9 +277,67 @@ class OrderItem(Base):
     )
     quantity: Mapped[int] = mapped_column(Integer)
     price_at_purchase: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Costo y proveedor al momento de la compra (el preferido del producto). Se guardan
+    # aquí para que el margen del pedido no cambie si después cambia el costo.
+    cost_at_purchase: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="SET NULL"), index=True
+    )
 
     order: Mapped[Order] = relationship(back_populates="items")
     product: Mapped[Product] = relationship()
+    supplier: Mapped["Supplier | None"] = relationship()
+
+
+# ---------- Proveedores ----------
+
+
+class Supplier(Base):
+    """Proveedor al que la tienda le compra (dropshipping): se le pide por WhatsApp."""
+
+    __tablename__ = "suppliers"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120))
+    whatsapp: Mapped[str] = mapped_column(String(11))
+    contact_name: Mapped[str | None] = mapped_column(String(120))
+    notes: Mapped[str | None] = mapped_column(Text)
+    # Días que tarda en despachar desde que se le pide (para avisar al cliente).
+    dispatch_days: Mapped[int | None] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    offers: Mapped[list["ProductSupplier"]] = relationship(back_populates="supplier")
+
+
+class ProductSupplier(Base):
+    """Un proveedor que tiene un producto, a qué costo y con qué código.
+
+    Un producto puede tener varios; el marcado como preferido es al que se le pide y
+    cuyo costo se usa para calcular el margen.
+    """
+
+    __tablename__ = "product_suppliers"
+    __table_args__ = (
+        UniqueConstraint("product_id", "supplier_id", name="uq_product_supplier"),
+        CheckConstraint("cost_usd >= 0", name="ck_product_suppliers_cost_non_negative"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    supplier_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="RESTRICT"), index=True
+    )
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    supplier_sku: Mapped[str | None] = mapped_column(String(80))
+    is_preferred: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    product: Mapped[Product] = relationship(back_populates="offers")
+    supplier: Mapped[Supplier] = relationship(back_populates="offers")
 
 
 class ExchangeRate(Base):

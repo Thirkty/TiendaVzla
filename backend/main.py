@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from database import BCV_AUTO_UPDATE, CORS_ORIGINS, RATE_REFRESH_HOURS, SessionLocal, engine
-from routers import accounts, admin_catalog, orders, products, rates
+from routers import accounts, admin_catalog, orders, products, rates, reports, suppliers
 from services.catalog import UPLOAD_PATH
 from services.orders import expire_pending_orders
 from services.rates import refresh_official_rate
@@ -85,6 +85,8 @@ app.include_router(orders.router)
 app.include_router(rates.router)
 app.include_router(accounts.router)
 app.include_router(admin_catalog.router)
+app.include_router(suppliers.router)
+app.include_router(reports.router)
 
 # Fotos de productos subidas desde el panel (en producción conviene servirlas desde un CDN).
 app.mount("/uploads", StaticFiles(directory=UPLOAD_PATH), name="uploads")

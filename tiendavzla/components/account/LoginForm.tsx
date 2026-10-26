@@ -22,7 +22,9 @@ export default function LoginForm() {
 
   useEffect(() => {
     void accountApi.me().then((me) => {
-      if (me) router.replace(next ?? homeFor(me));
+      // Solo se salta el formulario si ya es admin; una cuenta sin permisos puede
+      // entrar con otra.
+      if (me?.isAdmin) router.replace(next ?? homeFor(me));
     }).catch(() => undefined);
   }, [router, next]);
 

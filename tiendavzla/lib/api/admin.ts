@@ -6,10 +6,15 @@ import type {
   AdminOrder,
   AdminProduct,
   ExchangeRate,
+  OfferInput,
   OrderStatus,
   ProductInput,
   RateStatus,
+  SalesSummary,
   StoreSettings,
+  Supplier,
+  SupplierInput,
+  SupplierRequest,
 } from "./types";
 
 export type OrdersSummary = Record<OrderStatus, number>;
@@ -45,6 +50,32 @@ export const adminApi = {
       method: "PATCH",
       json: data,
     }),
+
+  setProductOffers: (productId: string, offers: OfferInput[]) =>
+    sessionFetch<AdminProduct>(`/api/admin/products/${encodeURIComponent(productId)}/suppliers`, {
+      method: "PUT",
+      json: { offers },
+    }),
+
+  suppliers: () => sessionFetch<Supplier[]>("/api/admin/suppliers"),
+  createSupplier: (data: SupplierInput) =>
+    sessionFetch<Supplier>("/api/admin/suppliers", { json: data }),
+  updateSupplier: (id: string, data: SupplierInput) =>
+    sessionFetch<Supplier>(`/api/admin/suppliers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      json: data,
+    }),
+
+  /** Mensajes de WhatsApp para pedirle la mercancía de un pedido a cada proveedor. */
+  supplierRequest: (orderId: string) =>
+    sessionFetch<SupplierRequest>(`/api/admin/orders/${encodeURIComponent(orderId)}/supplier-request`),
+  markSupplierRequested: (orderId: string) =>
+    sessionFetch<AdminOrder>(`/api/admin/orders/${encodeURIComponent(orderId)}/supplier-request`, {
+      method: "POST",
+    }),
+
+  salesSummary: (days = 30) =>
+    sessionFetch<SalesSummary>(`/api/admin/reports/summary?days=${days}`),
 
   /** Sube una foto; la API la valida, la achica y devuelve su URL. */
   uploadImage: (file: File) => {

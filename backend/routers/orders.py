@@ -16,6 +16,9 @@ from database import ORDER_TTL_MINUTES, get_db
 from models import Customer, Order, OrderItem, OrderStatus, Product, SellerStatus
 from schemas import (
     AdminOrderOut,
+    SupplierMessageOut,
+    SupplierRequestOut,
+    SupplierSummary,
     CheckoutIn,
     CheckoutOut,
     OrderOut,
@@ -31,6 +34,7 @@ from services.orders import (
     now,
 )
 from services.rates import get_current_rate
+from services.suppliers import supplier_messages
 
 router = APIRouter(prefix="/api", tags=["Órdenes"])
 
@@ -45,6 +49,7 @@ def order_query():
     """Consulta de órdenes con items, productos, vendedor y cliente precargados."""
     return select(Order).options(
         selectinload(Order.items).selectinload(OrderItem.product),
+        selectinload(Order.items).selectinload(OrderItem.supplier),
         selectinload(Order.customer),
         joinedload(Order.seller),
     )
@@ -59,6 +64,18 @@ def load_order(db: Session, order_id: uuid.UUID) -> Order:
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada")
     return order
+
+
+def _order_item(product: Product, quantity: int) -> OrderItem:
+    """Item del pedido con el precio de hoy y el costo/proveedor preferido de hoy."""
+    offer = product.preferred_offer
+    return OrderItem(
+        product_id=product.id,
+        quantity=quantity,
+        price_at_purchase=product.price_usd,
+        cost_at_purchase=offer.cost_usd if offer else None,
+        supplier_id=offer.supplier_id if offer else None,
+    )
 
 
 def money(value: Decimal) -> Decimal:
@@ -105,7 +122,7 @@ def checkout(payload: CheckoutIn, db: DbSession) -> CheckoutOut:
     products = db.scalars(
         select(Product)
         .where(Product.id.in_(list(quantities)))
-        .options(joinedload(Product.seller))
+        .options(joinedload(Product.seller), selectinload(Product.offers))
         .order_by(Product.id)  # orden fijo para evitar deadlocks
         .with_for_update(of=Product)
     ).all()
@@ -199,11 +216,7 @@ def checkout(payload: CheckoutIn, db: DbSession) -> CheckoutOut:
                 status=OrderStatus.PENDING,
                 expires_at=expires_at,
                 items=[
-                    OrderItem(
-                        product_id=pid,
-                        quantity=quantities[pid],
-                        price_at_purchase=by_id[pid].price_usd,
-                    )
+                    _order_item(by_id[pid], quantities[pid])
                     for pid in product_ids
                 ],
             )
@@ -317,4 +330,38 @@ def update_order_status(
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada")
     apply_status_change(db, order, payload, cancelled_by="el administrador")
+    return AdminOrderOut.model_validate(load_order(db, order_id))
+
+
+@router.get(
+    "/admin/orders/{order_id}/supplier-request",
+    response_model=SupplierRequestOut,
+    dependencies=[Depends(require_admin)],
+)
+def supplier_request(order_id: Annotated[uuid.UUID, Path()], db: DbSession) -> SupplierRequestOut:
+    """Mensajes de WhatsApp para pedirle a cada proveedor los items de este pedido, con los
+    datos de envío del cliente (el proveedor despacha directo). No cambia nada."""
+    order = load_order(db, order_id)
+    messages, missing = supplier_messages(order)
+    return SupplierRequestOut(
+        messages=[
+            SupplierMessageOut(
+                supplier=SupplierSummary.model_validate(supplier), message=text, whatsapp_url=url
+            )
+            for supplier, text, url in messages
+        ],
+        missing_supplier=missing,
+    )
+
+
+@router.post(
+    "/admin/orders/{order_id}/supplier-request",
+    response_model=AdminOrderOut,
+    dependencies=[Depends(require_admin)],
+)
+def mark_supplier_requested(order_id: Annotated[uuid.UUID, Path()], db: DbSession) -> AdminOrderOut:
+    """Marca que ya se le pidió la mercancía al proveedor."""
+    order = load_order(db, order_id)
+    order.supplier_requested_at = now()
+    db.commit()
     return AdminOrderOut.model_validate(load_order(db, order_id))
