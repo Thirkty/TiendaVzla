@@ -1,6 +1,7 @@
 """Modelos de la base de datos (SQLAlchemy 2.0, PostgreSQL)."""
 import enum
 import uuid
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -57,6 +58,13 @@ class Product(Base):
 
 
 class Customer(Base):
+    """Cliente identificado por su cédula.
+
+    Guarda los datos con los que compró por primera vez y NUNCA se modifica desde el
+    checkout: cualquiera puede escribir una cédula, así que no puede servir para
+    cambiar los datos de otra persona. Los datos de cada envío viven en la orden.
+    """
+
     __tablename__ = "customers"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -96,10 +104,44 @@ class Order(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_reason: Mapped[str | None] = mapped_column(String(200))
 
+    # Datos de contacto y envío tal como los escribió el cliente en ESTE pedido.
+    shipping_name: Mapped[str] = mapped_column(String(120))
+    shipping_cedula: Mapped[str] = mapped_column(String(12))
+    shipping_phone: Mapped[str] = mapped_column(String(11))
+    shipping_state: Mapped[str] = mapped_column(String(60))
+    shipping_city: Mapped[str] = mapped_column(String(80))
+    shipping_street: Mapped[str] = mapped_column(String(255))
+    shipping_reference: Mapped[str | None] = mapped_column(String(255))
+
     customer: Mapped[Customer] = relationship(back_populates="orders")
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
     )
+
+    @property
+    def shipping(self) -> "ShippingInfo":
+        return ShippingInfo(
+            name=self.shipping_name,
+            cedula=self.shipping_cedula,
+            phone=self.shipping_phone,
+            address_state=self.shipping_state,
+            address_city=self.shipping_city,
+            address_street=self.shipping_street,
+            address_reference=self.shipping_reference,
+        )
+
+
+@dataclass(frozen=True)
+class ShippingInfo:
+    """Vista de los datos de envío de una orden (para la respuesta del admin)."""
+
+    name: str
+    cedula: str
+    phone: str
+    address_state: str
+    address_city: str
+    address_street: str
+    address_reference: str | None
 
 
 class OrderItem(Base):

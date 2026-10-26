@@ -202,8 +202,12 @@ def set_rate(
     return entry
 
 
-def refresh_official_rate(db: Session) -> ExchangeRate:
-    """Consulta la tasa oficial y la guarda si es nueva. Devuelve la tasa vigente hoy."""
+def refresh_official_rate(db: Session, *, restore_official: bool = False) -> ExchangeRate:
+    """Consulta la tasa oficial y la guarda si es nueva. Devuelve la tasa vigente hoy.
+
+    Con restore_official=True (botón "Consultar BCV" del admin), si hoy rige una tasa
+    fijada a mano se vuelve a la última oficial: así un error al fijarla se deshace.
+    """
     global last_check
     try:
         fetched = fetch_official_rate()
@@ -231,7 +235,25 @@ def refresh_official_rate(db: Session) -> ExchangeRate:
             valid_from=fetched.valid_from,
             source_date=fetched.source_date,
         )
-    return get_current_rate(db)
+
+    current = get_current_rate(db)
+    if restore_official and current.source in ("manual", "env"):
+        official = db.scalar(
+            select(ExchangeRate)
+            .where(
+                ExchangeRate.source.in_(("bcv", "dolarapi")),
+                ExchangeRate.valid_from <= today_ve(),
+            )
+            .order_by(ExchangeRate.valid_from.desc(), ExchangeRate.created_at.desc())
+            .limit(1)
+        )
+        if official is not None:
+            log.info("Se vuelve a la tasa oficial %s (se deja la manual %s)", official.rate, current.rate)
+            # Se registra de nuevo con fecha valor de hoy para que le gane a la manual.
+            current = set_rate(
+                db, official.rate, source=official.source, source_date=official.source_date
+            )
+    return current
 
 
 # ---------- Alerta de tasa vieja ----------
