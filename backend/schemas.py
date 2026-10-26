@@ -173,8 +173,36 @@ class OrderOut(ApiModel):
     bcv_rate: Money
     payment_reference: str | None = None
     created_at: datetime
+    expires_at: datetime | None = None
+    payment_submitted_at: datetime | None = None
+    paid_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    cancel_reason: str | None = None
     items: list[OrderItemOut]
 
 
 class AdminOrderOut(OrderOut):
     customer: CustomerOut
+
+
+class OrderStatusUpdateIn(InputModel):
+    """Cambio de estado hecho por el admin (aprobar pago, enviar, cancelar...)."""
+
+    status: OrderStatus
+    reason: Annotated[CleanStr, StringConstraints(max_length=200)] | None = Field(
+        default=None, description="Motivo (se guarda al cancelar)"
+    )
+
+
+# ---------- Tasa BCV ----------
+
+
+class RateOut(ApiModel):
+    rate: Money
+    source: str
+    source_date: datetime | None = None
+    updated_at: datetime = Field(validation_alias="created_at")
+
+
+class RateIn(InputModel):
+    rate: Decimal = Field(gt=0, le=Decimal("100000000"), max_digits=14, decimal_places=4)

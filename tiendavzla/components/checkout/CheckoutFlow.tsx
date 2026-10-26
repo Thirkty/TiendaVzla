@@ -1,12 +1,13 @@
 "use client";
 // CheckoutFlow: orquesta los tres pasos del checkout.
 //   1. Datos  -> crea la orden (PENDING) y vacía el carrito.
-//   2. Pago   -> Pago Móvil + referencia (PAID).
-//   3. Listo  -> confirmación.
+//   2. Pago   -> Pago Móvil + referencia (PAYMENT_SUBMITTED). Vence si no pagan a tiempo.
+//   3. Listo  -> "estamos verificando tu pago" (el admin lo aprueba desde /admin).
 // La orden pendiente se guarda en sessionStorage para no perderla si recargan la página.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, CircleCheck, MessageCircle } from "lucide-react";
 import type { Order } from "@/lib/api/types";
@@ -47,6 +48,7 @@ export default function CheckoutFlow() {
   const items = useCartStore((s) => s.items);
   const totalUsd = useCartStore((s) => s.totalUsd());
   const clearCart = useCartStore((s) => s.clearCart);
+  const router = useRouter();
 
   const [step, setStep] = useState<Step>("loading");
   const [order, setOrder] = useState<Order | null>(null);
@@ -81,6 +83,12 @@ export default function CheckoutFlow() {
     savePendingOrder(null);
     setOrder(paid);
     setStep("done");
+  };
+
+  const handleExpired = () => {
+    savePendingOrder(null);
+    setOrder(null);
+    router.push("/#catalogo");
   };
 
   if (step === "loading") {
@@ -128,7 +136,7 @@ export default function CheckoutFlow() {
 
           {step === "pay" && order && (
             <div className="mx-auto max-w-lg">
-              <PagoMovilStep order={order} onPaid={handlePaid} />
+              <PagoMovilStep order={order} onPaid={handlePaid} onExpired={handleExpired} />
             </div>
           )}
 
@@ -171,15 +179,15 @@ function OrderConfirmed({ order }: { order: Order }) {
       >
         <CircleCheck className="size-20 text-success" strokeWidth={1.5} />
       </motion.div>
-      <h2 className="mt-4 text-3xl font-bold tracking-tight">¡Recibimos tu pago!</h2>
+      <h2 className="mt-4 text-3xl font-bold tracking-tight">¡Recibimos tu referencia!</h2>
       <p className="mt-2 text-ink/60">
         Pedido <span className="font-semibold text-ink">#{shortId}</span> por{" "}
         <span className="font-semibold text-ink">{formatBs(order.totalVes)}</span> · Referencia{" "}
         <span className="font-semibold text-ink">{order.paymentReference}</span>
       </p>
       <p className="mt-4 rounded-2xl border border-line bg-white px-5 py-4 text-sm text-ink/70">
-        Vamos a verificar el pago y te escribimos por WhatsApp para coordinar el envío. Llega en
-        unas 48 horas.
+        Estamos verificando el pago en el banco. Apenas se confirme te escribimos por WhatsApp
+        para coordinar el envío, que llega en unas 48 horas.
       </p>
 
       <ul className="mt-6 w-full space-y-2 text-left text-sm">

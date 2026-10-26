@@ -7,7 +7,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, Plus } from "lucide-react";
 import type { ProductCardProps } from "@/lib/api/types";
 import { useCartStore } from "@/lib/store/cart";
-import { formatUsd, formatVes } from "@/lib/utils/format";
+import { formatUsd } from "@/lib/utils/format";
+import { VesAmount } from "./RateProvider";
 
 export default function ProductCard({ product }: ProductCardProps) {
   const addItem = useCartStore((s) => s.addItem);
@@ -76,7 +77,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="text-2xl font-bold tracking-tight">{formatUsd(product.priceUsd)}</p>
-              <p className="text-sm text-ink/50">≈ {formatVes(product.priceUsd)}</p>
+              <VesAmount usd={product.priceUsd} className="text-sm text-ink/50" />
             </div>
             {lowStock && (
               <span className="text-xs font-semibold text-brand">Quedan {product.stock}</span>

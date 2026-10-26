@@ -22,8 +22,9 @@ from database import Base
 
 
 class OrderStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    PAID = "PAID"
+    PENDING = "PENDING"  # orden creada, esperando el Pago Móvil (vence en ORDER_TTL_MINUTES)
+    PAYMENT_SUBMITTED = "PAYMENT_SUBMITTED"  # el cliente envió la referencia; falta verificarla
+    PAID = "PAID"  # el admin verificó el pago en el banco
     PROCESSING = "PROCESSING"
     SHIPPED = "SHIPPED"
     DELIVERED = "DELIVERED"
@@ -87,6 +88,12 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Mientras está en PENDING, si pasa esta fecha la orden se cancela y se libera el stock.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    payment_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_reason: Mapped[str | None] = mapped_column(String(200))
 
     customer: Mapped[Customer] = relationship(back_populates="orders")
     items: Mapped[list["OrderItem"]] = relationship(
@@ -110,3 +117,19 @@ class OrderItem(Base):
 
     order: Mapped[Order] = relationship(back_populates="items")
     product: Mapped[Product] = relationship()
+
+
+class ExchangeRate(Base):
+    """Historial de la tasa BCV. La tasa vigente es la fila más reciente."""
+
+    __tablename__ = "exchange_rates"
+    __table_args__ = (CheckConstraint("rate > 0", name="ck_exchange_rates_rate_positive"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rate: Mapped[Decimal] = mapped_column(Numeric(14, 4))
+    source: Mapped[str] = mapped_column(String(20))  # "bcv" (automática), "manual" o "env"
+    # Fecha de publicación de la tasa según la fuente (None si es manual).
+    source_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )

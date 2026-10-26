@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import type { CartItem } from "@/lib/api/types";
-import { formatUsd, formatVes } from "@/lib/utils/format";
+import { formatUsd } from "@/lib/utils/format";
+import { VesAmount } from "../RateProvider";
 
 interface OrderSummaryProps {
   items: CartItem[];
@@ -36,9 +37,9 @@ export default function OrderSummary({ items, totalUsd }: OrderSummaryProps) {
           <span className="text-ink/60">Total</span>
           <span className="text-2xl font-bold tabular-nums">{formatUsd(totalUsd)}</span>
         </div>
-        <p className="text-right text-sm text-ink/50">≈ {formatVes(totalUsd)}</p>
+        <VesAmount usd={totalUsd} className="text-right text-sm text-ink/50" />
         <p className="mt-3 text-xs text-ink/50">
-          El monto final en bolívares se calcula con la tasa BCV al confirmar el pedido.
+          El monto final en bolívares se fija con la tasa BCV del momento en que confirmas el pedido.
         </p>
       </div>
     </section>

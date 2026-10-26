@@ -1,10 +1,11 @@
 "use client";
 // PagoMovilStep: muestra los datos del Pago Móvil y el monto exacto en Bs.,
-// y registra la referencia con POST /api/orders/{id}/pay.
+// muestra cuánto tiempo queda para pagar y envía la referencia con POST /api/orders/{id}/pay.
+// El pago queda "en verificación" hasta que el admin lo confirma en el banco.
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Check, Copy, Loader2, Smartphone } from "lucide-react";
+import { Check, Clock, Copy, Loader2, Smartphone } from "lucide-react";
 import { ApiError, confirmPayment } from "@/lib/api/client";
 import type { Order } from "@/lib/api/types";
 import { PAGO_MOVIL } from "@/lib/payment";
@@ -14,9 +15,12 @@ import { isValidReference } from "@/lib/utils/validation";
 interface PagoMovilStepProps {
   order: Order;
   onPaid: (order: Order) => void;
+  /** La orden venció: el padre limpia el estado y vuelve al formulario. */
+  onExpired: () => void;
 }
 
-export default function PagoMovilStep({ order, onPaid }: PagoMovilStepProps) {
+export default function PagoMovilStep({ order, onPaid, onExpired }: PagoMovilStepProps) {
+  const remaining = useCountdown(order.expiresAt);
   const [reference, setReference] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -29,6 +33,26 @@ export default function PagoMovilStep({ order, onPaid }: PagoMovilStepProps) {
     { label: "Teléfono", value: PAGO_MOVIL.phone, copy: PAGO_MOVIL.phone.replace(/\D/g, "") },
     { label: "Cédula / RIF", value: PAGO_MOVIL.idNumber, copy: PAGO_MOVIL.idNumber },
   ];
+
+  if (remaining === 0) {
+    return (
+      <div className="rounded-2xl border border-line bg-white p-8 text-center shadow-sm">
+        <Clock className="mx-auto size-12 text-brand" strokeWidth={1.5} />
+        <h2 className="mt-3 text-xl font-bold">Se acabó el tiempo para pagar</h2>
+        <p className="mt-2 text-ink/60">
+          Liberamos los productos de este pedido. Si ya hiciste el Pago Móvil, escríbenos por
+          WhatsApp con la referencia y lo resolvemos.
+        </p>
+        <button
+          type="button"
+          onClick={onExpired}
+          className="mt-6 rounded-2xl bg-brand px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-brand-dark"
+        >
+          Volver a la tienda
+        </button>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -61,6 +85,13 @@ export default function PagoMovilStep({ order, onPaid }: PagoMovilStepProps) {
         <p className="mt-2 text-sm text-white/60">
           {formatUsd(order.totalUsd)} a tasa BCV {order.bcvRate.toLocaleString("es-VE")} Bs/$
         </p>
+        {remaining !== null && (
+          <p className="mt-4 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm">
+            <Clock className="size-4 shrink-0" />
+            Tus productos están apartados por{" "}
+            <span className="font-bold tabular-nums">{formatRemaining(remaining)}</span>
+          </p>
+        )}
       </div>
 
       <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
@@ -116,16 +147,43 @@ export default function PagoMovilStep({ order, onPaid }: PagoMovilStepProps) {
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-lg font-semibold text-white shadow-sm transition hover:bg-brand-dark hover:shadow-lg disabled:cursor-wait disabled:opacity-70"
         >
           {submitting && <Loader2 className="size-5 animate-spin" />}
-          {submitting ? "Enviando…" : "Confirmar pago"}
+          {submitting ? "Enviando…" : "Ya pagué, enviar referencia"}
         </motion.button>
       </form>
 
       <p className="text-center text-xs text-ink/50">
-        Pedido #{order.id.slice(0, 8).toUpperCase()} · Tus productos quedan apartados mientras
-        confirmamos el pago.
+        Pedido #{order.id.slice(0, 8).toUpperCase()} · Verificamos cada pago en el banco antes de
+        despachar.
       </p>
     </div>
   );
+}
+
+/** Milisegundos que faltan para `deadline` (se actualiza cada segundo); null si no hay límite. */
+function useCountdown(deadline: string | null): number | null {
+  const target = deadline ? new Date(deadline).getTime() : null;
+  const [remaining, setRemaining] = useState<number | null>(() =>
+    target === null ? null : Math.max(0, target - Date.now()),
+  );
+
+  useEffect(() => {
+    if (target === null) return;
+    const tick = () => setRemaining(Math.max(0, target - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [target]);
+
+  return remaining;
+}
+
+function formatRemaining(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mmss = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return h > 0 ? `${h}:${mmss}` : mmss;
 }
 
 function CopyButton({ text, label, dark = false }: { text: string; label: string; dark?: boolean }) {
