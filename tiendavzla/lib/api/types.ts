@@ -36,6 +36,7 @@ export type CustomerField = keyof CustomerInput;
 
 export type OrderStatus =
   | "PENDING"
+  | "PAYMENT_SUBMITTED"
   | "PAID"
   | "PROCESSING"
   | "SHIPPED"
@@ -59,7 +60,47 @@ export interface Order {
   bcvRate: number;
   paymentReference: string | null;
   createdAt: string;
+  /** Mientras está PENDING: hora límite para enviar la referencia. */
+  expiresAt: string | null;
+  paymentSubmittedAt: string | null;
+  paidAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
   items: OrderItem[];
+}
+
+export interface AdminCustomer {
+  id: string;
+  cedula: string;
+  name: string;
+  phone: string;
+  addressState: string;
+  addressCity: string;
+  addressStreet: string;
+  addressReference: string | null;
+}
+
+/** Orden con los datos del cliente (endpoints de admin). */
+export interface AdminOrder extends Order {
+  customer: AdminCustomer;
+}
+
+export interface ExchangeRate {
+  rate: number;
+  source: "bcv" | "dolarapi" | "manual" | "env";
+  /** "Fecha Valor" del BCV (YYYY-MM-DD): desde ese día rige la tasa. */
+  validFrom: string;
+  sourceDate: string | null;
+  updatedAt: string;
+}
+
+/** Estado de la tasa para el panel de admin (GET /api/admin/rate/status). */
+export interface RateStatus {
+  current: ExchangeRate;
+  upcoming: ExchangeRate | null;
+  businessDaysBehind: number;
+  stale: boolean;
+  lastCheck: { at: string; ok: boolean; source: string | null; error: string | null } | null;
 }
 
 /* ---------- Estado global (Zustand) ---------- */

@@ -1,6 +1,14 @@
 // Fuente de datos real: consulta la API de FastAPI (backend/).
 // Misma interfaz que mock.ts, así los componentes no cambian.
-import type { CartItem, CustomerField, CustomerInput, Order, Product } from "./types";
+import { unstable_rethrow } from "next/navigation";
+import type {
+  CartItem,
+  CustomerField,
+  CustomerInput,
+  ExchangeRate,
+  Order,
+  Product,
+} from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -15,9 +23,20 @@ export async function getProducts(): Promise<Product[]> {
   try {
     return await apiGet<Product[]>("/api/products");
   } catch (error) {
+    unstable_rethrow(error); // deja pasar las señales internas de Next (render dinámico)
     // Si la API está caída mostramos el catálogo vacío en vez de romper la página.
     console.error("No se pudieron cargar los productos:", error);
     return [];
+  }
+}
+
+export async function getRate(): Promise<ExchangeRate | null> {
+  try {
+    return await apiGet<ExchangeRate>("/api/rate");
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error("No se pudo cargar la tasa BCV:", error);
+    return null;
   }
 }
 

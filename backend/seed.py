@@ -1,13 +1,14 @@
 """Carga los 6 productos de prueba (los mismos del frontend). Es seguro correrlo varias veces.
 
-Uso:  python seed.py
+Uso:  alembic upgrade head   (crea las tablas)
+      python seed.py
 """
 from decimal import Decimal
 
 from sqlalchemy import select
 
 import models  # noqa: F401
-from database import Base, SessionLocal, engine
+from database import SessionLocal
 from models import Product
 
 
@@ -68,7 +69,6 @@ PRODUCTS = [
 
 
 def main() -> None:
-    Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         existing = set(db.scalars(select(Product.slug)).all())
         new = [Product(**data) for data in PRODUCTS if data["slug"] not in existing]

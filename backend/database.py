@@ -28,12 +28,24 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
+# Tasa inicial: solo se usa si la tabla exchange_rates está vacía y no se pudo
+# consultar la tasa oficial. Después la tasa vive en la base de datos.
 try:
     BCV_RATE = Decimal(os.getenv("BCV_RATE", "40"))
     if BCV_RATE <= 0:
         raise InvalidOperation
 except InvalidOperation as exc:
     raise RuntimeError("BCV_RATE debe ser un número mayor que 0") from exc
+
+# Actualización automática de la tasa oficial: se lee de bcv.org.ve y, si falla,
+# de DolarApi (respaldo). Ver services/rates.py.
+BCV_AUTO_UPDATE = os.getenv("BCV_AUTO_UPDATE", "true").lower() == "true"
+BCV_URL = os.getenv("BCV_URL", "https://www.bcv.org.ve/")
+BCV_API_URL = os.getenv("BCV_API_URL", "https://ve.dolarapi.com/v1/dolares/oficial")
+RATE_REFRESH_HOURS = float(os.getenv("RATE_REFRESH_HOURS", "1"))
+
+# Minutos que una orden PENDING aparta el stock antes de cancelarse sola.
+ORDER_TTL_MINUTES = int(os.getenv("ORDER_TTL_MINUTES", "120"))
 
 SQL_ECHO = os.getenv("SQL_ECHO", "false").lower() == "true"
 

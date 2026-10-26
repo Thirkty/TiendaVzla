@@ -1,10 +1,5 @@
 // Utilidades de formateo de moneda (USD y conversión a VES con tasa BCV).
-
-const DEFAULT_BCV_RATE = 40;
-
-// Se lee de forma literal para que Next.js lo inyecte en el bundle del cliente.
-const parsedRate = Number(process.env.NEXT_PUBLIC_BCV_RATE);
-export const BCV_RATE = Number.isFinite(parsedRate) && parsedRate > 0 ? parsedRate : DEFAULT_BCV_RATE;
+// La tasa viene de la API (GET /api/rate); en componentes se obtiene con useBcvRate().
 
 const vesFormatter = new Intl.NumberFormat("es-VE", {
   style: "currency",
@@ -21,9 +16,9 @@ export function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/** Convierte USD a bolívares con la tasa BCV y lo formatea. */
-export function formatVes(usd: number): string {
-  return vesFormatter.format(roundMoney(usd * BCV_RATE));
+/** Convierte USD a bolívares con la tasa BCV dada y lo formatea. */
+export function formatVes(usd: number, rate: number): string {
+  return vesFormatter.format(roundMoney(usd * rate));
 }
 
 /** Formatea un monto en dólares. */

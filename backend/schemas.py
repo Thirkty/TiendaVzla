@@ -5,7 +5,7 @@ directo con los tipos del frontend en Next.js. La entrada acepta camelCase o sna
 """
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 
@@ -173,8 +173,54 @@ class OrderOut(ApiModel):
     bcv_rate: Money
     payment_reference: str | None = None
     created_at: datetime
+    expires_at: datetime | None = None
+    payment_submitted_at: datetime | None = None
+    paid_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    cancel_reason: str | None = None
     items: list[OrderItemOut]
 
 
 class AdminOrderOut(OrderOut):
     customer: CustomerOut
+
+
+class OrderStatusUpdateIn(InputModel):
+    """Cambio de estado hecho por el admin (aprobar pago, enviar, cancelar...)."""
+
+    status: OrderStatus
+    reason: Annotated[CleanStr, StringConstraints(max_length=200)] | None = Field(
+        default=None, description="Motivo (se guarda al cancelar)"
+    )
+
+
+# ---------- Tasa BCV ----------
+
+
+class RateOut(ApiModel):
+    rate: Money
+    source: str
+    valid_from: date
+    source_date: datetime | None = None
+    updated_at: datetime = Field(validation_alias="created_at")
+
+
+class RateCheckOut(ApiModel):
+    at: datetime
+    ok: bool
+    source: str | None = None
+    error: str | None = None
+
+
+class RateStatusOut(ApiModel):
+    """Estado de la tasa para el panel: vigente, la próxima publicada y si está vieja."""
+
+    current: RateOut
+    upcoming: RateOut | None = None
+    business_days_behind: int
+    stale: bool
+    last_check: RateCheckOut | None = None
+
+
+class RateIn(InputModel):
+    rate: Decimal = Field(gt=0, le=Decimal("100000000"), max_digits=14, decimal_places=4)

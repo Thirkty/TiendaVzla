@@ -1,17 +1,20 @@
-"""Endpoints del checkout, pago simulado y administración de órdenes."""
-import secrets
+"""Endpoints del checkout, envío de la referencia de pago y administración de órdenes."""
 import uuid
+from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from database import ADMIN_API_KEY, BCV_RATE, get_db
+from auth import require_admin
+from database import ORDER_TTL_MINUTES, get_db
 from models import Customer, Order, OrderItem, OrderStatus, Product
-from schemas import AdminOrderOut, CheckoutIn, OrderOut, PaymentIn
+from schemas import AdminOrderOut, CheckoutIn, OrderOut, OrderStatusUpdateIn, PaymentIn
+from services.orders import ADMIN_TRANSITIONS, cancel_order, is_expired, lock_order, now
+from services.rates import get_current_rate
 
 router = APIRouter(prefix="/api", tags=["Órdenes"])
 
@@ -20,17 +23,6 @@ CENTS = Decimal("0.01")
 
 
 # ---------- Helpers ----------
-
-
-def require_admin(x_admin_key: Annotated[str | None, Header()] = None) -> None:
-    """Protege los endpoints de admin con el header X-Admin-Key."""
-    if not x_admin_key or not secrets.compare_digest(
-        x_admin_key.encode(), ADMIN_API_KEY.encode()
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No autorizado",
-        )
 
 
 def _order_query():
@@ -59,7 +51,8 @@ def _load_order(db: Session, order_id: uuid.UUID) -> Order:
 def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
     """Valida stock, calcula totales con precios de la BD y crea la orden en PENDING.
 
-    El stock se descuenta al crear la orden (queda reservado para el cliente).
+    El stock se descuenta al crear la orden y queda apartado ORDER_TTL_MINUTES;
+    si en ese tiempo no llega la referencia de pago, la orden se cancela sola.
     """
     # 1. Agrupar cantidades por producto (por si el carrito trae duplicados).
     quantities: dict[uuid.UUID, int] = {}
@@ -104,7 +97,8 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
     total_usd = sum(
         (by_id[pid].price_usd * qty for pid, qty in quantities.items()), Decimal("0")
     ).quantize(CENTS, rounding=ROUND_HALF_UP)
-    total_ves = (total_usd * BCV_RATE).quantize(CENTS, rounding=ROUND_HALF_UP)
+    bcv_rate = get_current_rate(db).rate
+    total_ves = (total_usd * bcv_rate).quantize(CENTS, rounding=ROUND_HALF_UP)
 
     # 4. Crear o actualizar el cliente (la cédula es la clave única).
     data = payload.customer
@@ -124,8 +118,9 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
         customer=customer,
         total_usd=total_usd,
         total_ves=total_ves,
-        bcv_rate=BCV_RATE,
+        bcv_rate=bcv_rate,
         status=OrderStatus.PENDING,
+        expires_at=now() + timedelta(minutes=ORDER_TTL_MINUTES),
         items=[
             OrderItem(product_id=pid, quantity=qty, price_at_purchase=by_id[pid].price_usd)
             for pid, qty in quantities.items()
@@ -147,19 +142,30 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
     return OrderOut.model_validate(_load_order(db, order.id))
 
 
-# ---------- Pago (simulado) ----------
+# ---------- Pago ----------
 
 
 @router.post("/orders/{order_id}/pay", response_model=OrderOut)
-def confirm_payment(
+def submit_payment(
     order_id: Annotated[uuid.UUID, Path()],
     payload: PaymentIn,
     db: DbSession,
 ) -> OrderOut:
-    """Simula la confirmación del Pago Móvil: PENDING -> PAID."""
-    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    """El cliente envía la referencia del Pago Móvil: PENDING -> PAYMENT_SUBMITTED.
+
+    El pago NO queda confirmado: el admin lo verifica en el banco y lo aprueba.
+    """
+    order = lock_order(db, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada")
+
+    if is_expired(order):
+        cancel_order(order, "Venció el tiempo para pagar")
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Esta orden venció y los productos se liberaron. Haz el pedido de nuevo.",
+        )
     if order.status != OrderStatus.PENDING:
         db.rollback()
         raise HTTPException(
@@ -167,8 +173,10 @@ def confirm_payment(
             detail=f"La orden no está pendiente de pago (estado actual: {order.status.value})",
         )
 
-    order.status = OrderStatus.PAID
+    order.status = OrderStatus.PAYMENT_SUBMITTED
     order.payment_reference = payload.reference
+    order.payment_submitted_at = now()
+    order.expires_at = None  # ya no vence: queda esperando la verificación
     db.commit()
 
     return OrderOut.model_validate(_load_order(db, order_id))
@@ -194,3 +202,61 @@ def list_orders(
         stmt = stmt.where(Order.status == status_filter)
     orders = db.scalars(stmt).all()
     return [AdminOrderOut.model_validate(o) for o in orders]
+
+
+@router.get(
+    "/admin/orders/summary",
+    response_model=dict[OrderStatus, int],
+    dependencies=[Depends(require_admin)],
+)
+def orders_summary(db: DbSession) -> dict[OrderStatus, int]:
+    """Cantidad de órdenes por estado (para los contadores del panel)."""
+    rows = db.execute(select(Order.status, func.count()).group_by(Order.status)).all()
+    counts = {s: 0 for s in OrderStatus}
+    counts.update({status_: count for status_, count in rows})
+    return counts
+
+
+@router.patch(
+    "/admin/orders/{order_id}/status",
+    response_model=AdminOrderOut,
+    dependencies=[Depends(require_admin)],
+)
+def update_order_status(
+    order_id: Annotated[uuid.UUID, Path()],
+    payload: OrderStatusUpdateIn,
+    db: DbSession,
+) -> AdminOrderOut:
+    """Cambia el estado de una orden respetando el flujo permitido.
+
+    - PAYMENT_SUBMITTED -> PAID: pago verificado en el banco.
+    - PAYMENT_SUBMITTED -> PENDING: referencia rechazada; el cliente puede reenviarla.
+    - Cualquier cancelación devuelve el stock.
+    """
+    order = lock_order(db, order_id)
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada")
+
+    target = payload.status
+    if target not in ADMIN_TRANSITIONS[order.status]:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se puede pasar de {order.status.value} a {target.value}",
+        )
+
+    if target == OrderStatus.CANCELLED:
+        cancel_order(order, payload.reason or "Cancelada por el administrador")
+    elif target == OrderStatus.PENDING:
+        # Referencia rechazada: se limpia y el cliente tiene otro plazo para pagar.
+        order.status = OrderStatus.PENDING
+        order.payment_reference = None
+        order.payment_submitted_at = None
+        order.expires_at = now() + timedelta(minutes=ORDER_TTL_MINUTES)
+    else:
+        order.status = target
+        if target == OrderStatus.PAID:
+            order.paid_at = now()
+
+    db.commit()
+    return AdminOrderOut.model_validate(_load_order(db, order_id))

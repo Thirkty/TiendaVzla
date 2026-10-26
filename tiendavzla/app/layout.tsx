@@ -1,11 +1,9 @@
-// Layout raíz: fuente, metadatos y piezas globales (navbar, footer, carrito y WhatsApp).
+// Layout raíz: fuente, metadatos y tasa BCV. La tienda pone su navbar/footer en app/(tienda)/layout.tsx.
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import type { ReactNode } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import CartDrawer from "@/components/CartDrawer";
-import WhatsAppButton from "@/components/WhatsAppButton";
+import { RateProvider } from "@/components/RateProvider";
+import { getRate } from "@/lib/api/client";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -24,15 +22,13 @@ export const viewport: Viewport = {
   themeColor: "#FAFAF7",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const rate = await getRate();
+
   return (
     <html lang="es" className={jakarta.variable}>
       <body className="min-h-dvh bg-cream font-sans text-base leading-relaxed text-ink antialiased">
-        <Navbar />
-        <main>{children}</main>
-        <Footer />
-        <CartDrawer />
-        <WhatsAppButton />
+        <RateProvider rate={rate?.rate ?? null}>{children}</RateProvider>
       </body>
     </html>
   );

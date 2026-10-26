@@ -8,7 +8,8 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { selectTotalItems, useCartStore } from "@/lib/store/cart";
-import { formatUsd, formatVes } from "@/lib/utils/format";
+import { formatUsd } from "@/lib/utils/format";
+import { VesAmount } from "./RateProvider";
 
 export default function CartDrawer() {
   const isOpen = useCartStore((s) => s.isOpen);
@@ -195,7 +196,7 @@ export default function CartDrawer() {
                     <span className="text-ink/60">Subtotal</span>
                     <span className="text-2xl font-bold tabular-nums">{formatUsd(totalUsd)}</span>
                   </div>
-                  <p className="text-right text-sm text-ink/50">≈ {formatVes(totalUsd)}</p>
+                  <VesAmount usd={totalUsd} className="text-right text-sm text-ink/50" />
 
                   <motion.button
                     type="button"
