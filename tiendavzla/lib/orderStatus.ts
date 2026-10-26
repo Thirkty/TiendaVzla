@@ -1,4 +1,4 @@
-// Textos, colores y acciones del admin para cada estado de una orden.
+// Textos, colores y acciones (vendedor y admin) para cada estado de una orden.
 // Las transiciones permitidas son las mismas de backend/services/orders.py.
 import type { OrderStatus } from "@/lib/api/types";
 
@@ -32,6 +32,25 @@ export const STATUS_BADGE: Record<OrderStatus, string> = {
   DELIVERED: "bg-success/20 text-deep",
   CANCELLED: "bg-ink/10 text-ink/50",
 };
+
+/** Agencias de envío (las mismas que acepta el backend en services/orders.py). */
+export const CARRIERS = [
+  "MRW",
+  "Zoom",
+  "Tealca",
+  "Domesa",
+  "Liberty Express",
+  "Delivery propio",
+  "Retiro en persona",
+  "Otro",
+] as const;
+
+/** Datos extra de un cambio de estado: motivo al cancelar, agencia y guía al despachar. */
+export interface StatusChangeExtra {
+  reason?: string;
+  carrier?: string;
+  trackingNumber?: string;
+}
 
 export interface StatusAction {
   to: OrderStatus;

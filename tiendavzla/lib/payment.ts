@@ -1,11 +1,5 @@
-// Datos de la cuenta que recibe los Pago Móvil. Se configuran en .env.local
-// (variables NEXT_PUBLIC_PAGO_MOVIL_*); reinicia `npm run dev` después de cambiarlas.
+// Los datos de Pago Móvil vienen de cada vendedor en la respuesta del checkout
+// (order.seller); ya no hay una cuenta única de la plataforma.
 
-export const PAGO_MOVIL = {
-  bank: process.env.NEXT_PUBLIC_PAGO_MOVIL_BANCO ?? "",
-  phone: process.env.NEXT_PUBLIC_PAGO_MOVIL_TELEFONO ?? "",
-  idNumber: process.env.NEXT_PUBLIC_PAGO_MOVIL_CEDULA ?? "",
-} as const;
-
-/** Clave del sessionStorage donde guardamos la orden pendiente (por si recargan la página). */
-export const PENDING_ORDER_KEY = "tiendavzla-pending-order";
+/** Clave del sessionStorage donde guardamos las órdenes pendientes (por si recargan). */
+export const PENDING_ORDER_KEY = "tiendavzla-pending-orders";

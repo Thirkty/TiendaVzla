@@ -60,10 +60,24 @@ export interface OrderItem {
   product: Pick<Product, "id" | "slug" | "name" | "imageUrl">;
 }
 
-/** Orden tal como la devuelve POST /api/checkout y POST /api/orders/{id}/pay. */
+/** Datos del vendedor que el cliente necesita para pagarle y contactarlo. */
+export interface OrderSeller {
+  storeName: string;
+  slug: string;
+  whatsapp: string;
+  pagoMovilBank: string;
+  pagoMovilPhone: string;
+  pagoMovilId: string;
+}
+
+/** Orden (de UN vendedor) tal como la devuelven el checkout y POST /api/orders/{id}/pay. */
 export interface Order {
   id: string;
+  checkoutId: string;
   status: OrderStatus;
+  seller: OrderSeller;
+  subtotalUsd: number;
+  shippingUsd: number;
   totalUsd: number;
   totalVes: number;
   bcvRate: number;
@@ -75,7 +89,16 @@ export interface Order {
   paidAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  carrier: string | null;
+  trackingNumber: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
   items: OrderItem[];
+}
+
+export interface CheckoutResult {
+  checkoutId: string;
+  orders: Order[];
 }
 
 export interface AdminCustomer {
@@ -100,11 +123,14 @@ export interface ShippingInfo {
   addressReference: string | null;
 }
 
-/** Orden con sus datos de envío (endpoints de admin). */
-export interface AdminOrder extends Order {
+/** Orden con sus datos de envío (panel del vendedor). */
+export interface SellerOrder extends Order {
   /** Datos de ESTE pedido: son los que hay que usar para despachar y contactar. */
   shipping: ShippingInfo;
-  /** Cliente vinculado por cédula (datos de su primera compra). */
+}
+
+/** Orden vista por el admin: además, el cliente vinculado por cédula. */
+export interface AdminOrder extends SellerOrder {
   customer: AdminCustomer;
 }
 

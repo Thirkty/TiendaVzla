@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { selectTotalItems, useCartStore } from "@/lib/store/cart";
+import { cartTotals, groupBySeller } from "@/lib/store/groups";
 import { formatUsd } from "@/lib/utils/format";
 import { VesAmount } from "./RateProvider";
 
@@ -15,7 +16,8 @@ export default function CartDrawer() {
   const isOpen = useCartStore((s) => s.isOpen);
   const items = useCartStore((s) => s.items);
   const totalItems = useCartStore(selectTotalItems);
-  const totalUsd = useCartStore((s) => s.totalUsd());
+  const groups = groupBySeller(items);
+  const totals = cartTotals(groups);
   const closeCart = useCartStore((s) => s.closeCart);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
@@ -96,13 +98,18 @@ export default function CartDrawer() {
             {items.length === 0 ? (
               /* Estado vacío */
               <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
-                <span className="text-6xl" role="img" aria-label="Carrito vacío">
+                <span
+                  className="text-6xl"
+                  role="img"
+                  aria-label="Carrito vacío"
+                >
                   🛒
                 </span>
                 <div>
                   <p className="text-lg font-bold">Tu carrito está vacío</p>
                   <p className="mt-1 text-ink/60">
-                    Échale un ojo al catálogo, seguro hay algo que te resuelve el día.
+                    Échale un ojo al catálogo, seguro hay algo que te resuelve
+                    el día.
                   </p>
                 </div>
                 <button
@@ -115,88 +122,126 @@ export default function CartDrawer() {
               </div>
             ) : (
               <>
-                {/* Items */}
-                <ul className="flex-1 space-y-3 overflow-y-auto px-6 py-5">
-                  <AnimatePresence initial={false}>
-                    {items.map(({ product, quantity }) => (
-                      <motion.li
-                        key={product.id}
-                        layout
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, x: 48 }}
-                        transition={{ duration: 0.25 }}
-                        className="flex gap-4 rounded-2xl border border-line bg-white p-3 shadow-sm"
-                      >
-                        <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-line/50">
-                          <Image
-                            src={product.imageUrl}
-                            alt={product.name}
-                            fill
-                            sizes="80px"
-                            className="object-cover"
-                          />
-                        </div>
-
-                        <div className="flex min-w-0 flex-1 flex-col">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="line-clamp-2 text-sm font-semibold leading-snug">
-                              {product.name}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => removeItem(product.id)}
-                              aria-label={`Eliminar ${product.name}`}
-                              className="shrink-0 rounded-lg p-1 text-ink/40 transition-colors hover:bg-brand/10 hover:text-brand"
+                {/* Items agrupados por vendedor: cada grupo es un pedido y un pago aparte */}
+                <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+                  {groups.map((group) => (
+                    <section key={group.seller.id}>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink/50">
+                        {group.seller.storeName}
+                      </p>
+                      <ul className="space-y-3">
+                        <AnimatePresence initial={false}>
+                          {group.items.map(({ product, quantity }) => (
+                            <motion.li
+                              key={product.id}
+                              layout
+                              initial={{ opacity: 0, y: 12 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, x: 48 }}
+                              transition={{ duration: 0.25 }}
+                              className="flex gap-4 rounded-2xl border border-line bg-white p-3 shadow-sm"
                             >
-                              <Trash2 className="size-4" />
-                            </button>
-                          </div>
+                              <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-line/50">
+                                <Image
+                                  src={product.imageUrl}
+                                  alt={product.name}
+                                  fill
+                                  sizes="80px"
+                                  className="object-cover"
+                                />
+                              </div>
 
-                          <div className="mt-auto flex items-center justify-between pt-2">
-                            <div className="flex items-center rounded-full border border-line">
-                              <button
-                                type="button"
-                                onClick={() => updateQuantity(product.id, quantity - 1)}
-                                disabled={quantity <= 1}
-                                aria-label="Restar uno"
-                                className="rounded-full p-1.5 transition-colors hover:bg-line disabled:cursor-not-allowed disabled:opacity-30"
-                              >
-                                <Minus className="size-3.5" />
-                              </button>
-                              <span className="w-8 text-center text-sm font-semibold tabular-nums">
-                                {quantity}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => updateQuantity(product.id, quantity + 1)}
-                                disabled={quantity >= product.stock}
-                                aria-label="Sumar uno"
-                                className="rounded-full p-1.5 transition-colors hover:bg-line disabled:cursor-not-allowed disabled:opacity-30"
-                              >
-                                <Plus className="size-3.5" />
-                              </button>
-                            </div>
-                            <p className="font-bold tabular-nums">
-                              {formatUsd(product.priceUsd * quantity)}
-                            </p>
-                          </div>
-                          {quantity >= product.stock && (
-                            <p className="mt-1 text-xs text-brand">Máximo disponible</p>
-                          )}
-                        </div>
-                      </motion.li>
-                    ))}
-                  </AnimatePresence>
-                </ul>
+                              <div className="flex min-w-0 flex-1 flex-col">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="line-clamp-2 text-sm font-semibold leading-snug">
+                                    {product.name}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeItem(product.id)}
+                                    aria-label={`Eliminar ${product.name}`}
+                                    className="shrink-0 rounded-lg p-1 text-ink/40 transition-colors hover:bg-brand/10 hover:text-brand"
+                                  >
+                                    <Trash2 className="size-4" />
+                                  </button>
+                                </div>
+
+                                <div className="mt-auto flex items-center justify-between pt-2">
+                                  <div className="flex items-center rounded-full border border-line">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateQuantity(product.id, quantity - 1)
+                                      }
+                                      disabled={quantity <= 1}
+                                      aria-label="Restar uno"
+                                      className="rounded-full p-1.5 transition-colors hover:bg-line disabled:cursor-not-allowed disabled:opacity-30"
+                                    >
+                                      <Minus className="size-3.5" />
+                                    </button>
+                                    <span className="w-8 text-center text-sm font-semibold tabular-nums">
+                                      {quantity}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateQuantity(product.id, quantity + 1)
+                                      }
+                                      disabled={quantity >= product.stock}
+                                      aria-label="Sumar uno"
+                                      className="rounded-full p-1.5 transition-colors hover:bg-line disabled:cursor-not-allowed disabled:opacity-30"
+                                    >
+                                      <Plus className="size-3.5" />
+                                    </button>
+                                  </div>
+                                  <p className="font-bold tabular-nums">
+                                    {formatUsd(product.priceUsd * quantity)}
+                                  </p>
+                                </div>
+                                {quantity >= product.stock && (
+                                  <p className="mt-1 text-xs text-brand">
+                                    Máximo disponible
+                                  </p>
+                                )}
+                              </div>
+                            </motion.li>
+                          ))}
+                        </AnimatePresence>
+                      </ul>
+                      <p className="mt-2 flex justify-between px-1 text-sm text-ink/60">
+                        <span>Envío</span>
+                        <span className="tabular-nums">
+                          {group.shippingUsd > 0
+                            ? formatUsd(group.shippingUsd)
+                            : "Gratis"}
+                        </span>
+                      </p>
+                    </section>
+                  ))}
+                </div>
 
                 {/* Resumen */}
                 <footer className="border-t border-line bg-white px-6 py-5">
+                  {totals.shippingUsd > 0 && (
+                    <p className="flex justify-between text-sm text-ink/60">
+                      <span>
+                        Productos {formatUsd(totals.subtotalUsd)} + envío
+                      </span>
+                      <span className="tabular-nums">
+                        {formatUsd(totals.shippingUsd)}
+                      </span>
+                    </p>
+                  )}
                   <div className="flex items-baseline justify-between">
-                    <span className="text-ink/60">Subtotal</span>
-                    <span className="text-2xl font-bold tabular-nums">{formatUsd(totalUsd)}</span>
+                    <span className="text-ink/60">Total</span>
+                    <span className="text-2xl font-bold tabular-nums">
+                      {formatUsd(totals.totalUsd)}
+                    </span>
                   </div>
-                  <VesAmount usd={totalUsd} className="text-right text-sm text-ink/50" />
+                  <VesAmount
+                    usd={totals.totalUsd}
+                    className="text-right text-sm text-ink/50"
+                  />
 
                   <motion.button
                     type="button"
@@ -208,7 +253,9 @@ export default function CartDrawer() {
                     Ir a pagar
                   </motion.button>
                   <p className="mt-3 text-center text-xs text-ink/50">
-                    Pago Móvil · Transferencia · Efectivo
+                    {groups.length > 1
+                      ? `${groups.length} vendedores · un Pago Móvil a cada uno`
+                      : "Pagas por Pago Móvil directo al vendedor"}
                   </p>
                 </footer>
               </>

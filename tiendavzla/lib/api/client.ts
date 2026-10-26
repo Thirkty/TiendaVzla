@@ -3,6 +3,7 @@
 import { unstable_rethrow } from "next/navigation";
 import type {
   CartItem,
+  CheckoutResult,
   CustomerField,
   CustomerInput,
   ExchangeRate,
@@ -119,12 +120,13 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-/** Crea la orden en PENDING. El backend recalcula precios y reserva el stock. */
-export function createOrder(customer: CustomerInput, items: CartItem[]): Promise<Order> {
-  return apiPost<Order>("/api/checkout", {
+/** Crea una orden PENDING por vendedor. El backend recalcula precios y envío y reserva el stock. */
+export async function createOrders(customer: CustomerInput, items: CartItem[]): Promise<Order[]> {
+  const result = await apiPost<CheckoutResult>("/api/checkout", {
     customer,
     items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
   });
+  return result.orders;
 }
 
 /** Registra la referencia del Pago Móvil (PENDING -> PAID). */

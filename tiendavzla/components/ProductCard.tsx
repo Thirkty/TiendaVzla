@@ -81,6 +81,13 @@ export default function ProductCard({ product }: ProductCardProps) {
             <div>
               <p className="text-2xl font-bold tracking-tight">{formatUsd(product.priceUsd)}</p>
               <VesAmount usd={product.priceUsd} className="text-sm text-ink/50" />
+              {product.shippingCostUsd !== undefined && (
+                <p className="text-xs font-medium text-deep">
+                  {product.shippingCostUsd > 0
+                    ? `+ ${formatUsd(product.shippingCostUsd)} de envío`
+                    : "Envío gratis"}
+                </p>
+              )}
             </div>
             {lowStock && (
               <span className="text-xs font-semibold text-brand">Quedan {product.stock}</span>

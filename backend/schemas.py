@@ -187,9 +187,24 @@ class OrderItemOut(ApiModel):
     product: ProductSummary
 
 
+class OrderSellerOut(ApiModel):
+    """Datos del vendedor que el cliente necesita para pagarle y contactarlo."""
+
+    store_name: str
+    slug: str
+    whatsapp: str
+    pago_movil_bank: str
+    pago_movil_phone: str
+    pago_movil_id: str
+
+
 class OrderOut(ApiModel):
     id: uuid.UUID
+    checkout_id: uuid.UUID
     status: OrderStatus
+    seller: OrderSellerOut
+    subtotal_usd: Money
+    shipping_usd: Money
     total_usd: Money
     total_ves: Money
     bcv_rate: Money
@@ -200,7 +215,18 @@ class OrderOut(ApiModel):
     paid_at: datetime | None = None
     cancelled_at: datetime | None = None
     cancel_reason: str | None = None
+    carrier: str | None = None
+    tracking_number: str | None = None
+    shipped_at: datetime | None = None
+    delivered_at: datetime | None = None
     items: list[OrderItemOut]
+
+
+class CheckoutOut(ApiModel):
+    """Resultado del checkout: una orden por vendedor, cada una se paga por separado."""
+
+    checkout_id: uuid.UUID
+    orders: list[OrderOut]
 
 
 class ShippingOut(ApiModel):
@@ -215,17 +241,28 @@ class ShippingOut(ApiModel):
     address_reference: str | None = None
 
 
-class AdminOrderOut(OrderOut):
+class SellerOrderOut(OrderOut):
+    """Lo que ve el vendedor: datos de envío del pedido (no la ficha del cliente)."""
+
     shipping: ShippingOut
+
+
+class AdminOrderOut(SellerOrderOut):
     customer: CustomerOut  # cliente vinculado por cédula (datos de su primera compra)
 
 
 class OrderStatusUpdateIn(InputModel):
-    """Cambio de estado hecho por el admin (aprobar pago, enviar, cancelar...)."""
+    """Cambio de estado (aprobar pago, despachar, cancelar...) por el vendedor o el admin."""
 
     status: OrderStatus
     reason: Annotated[CleanStr, StringConstraints(max_length=200)] | None = Field(
         default=None, description="Motivo (se guarda al cancelar)"
+    )
+    carrier: Annotated[CleanStr, StringConstraints(max_length=40)] | None = Field(
+        default=None, description="Agencia (obligatoria al pasar a SHIPPED)"
+    )
+    tracking_number: Annotated[CleanStr, StringConstraints(min_length=1, max_length=60)] | None = Field(
+        default=None, description="Número de guía (obligatorio al pasar a SHIPPED)"
     )
 
 

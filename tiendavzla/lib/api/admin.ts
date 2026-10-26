@@ -1,5 +1,6 @@
 // Endpoints de administración. Usan la sesión del admin (cookie); si no hay sesión la
 // API responde 401 y si la cuenta no es admin, 403.
+import type { StatusChangeExtra } from "@/lib/orderStatus";
 import { sessionFetch } from "./session";
 import type {
   AdminOrder,
@@ -18,10 +19,10 @@ export const adminApi = {
   orders: (status: OrderStatus, limit = 100) =>
     sessionFetch<AdminOrder[]>(`/api/admin/orders?status=${status}&limit=${limit}`),
 
-  updateStatus: (orderId: string, status: OrderStatus, reason?: string) =>
+  updateStatus: (orderId: string, status: OrderStatus, extra: StatusChangeExtra = {}) =>
     sessionFetch<AdminOrder>(`/api/admin/orders/${encodeURIComponent(orderId)}/status`, {
       method: "PATCH",
-      json: { status, ...(reason && { reason }) },
+      json: { status, ...extra },
     }),
 
   rateStatus: () => sessionFetch<RateStatus>("/api/admin/rate/status"),

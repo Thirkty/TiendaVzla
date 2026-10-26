@@ -27,7 +27,7 @@ from database import Base
 class OrderStatus(str, enum.Enum):
     PENDING = "PENDING"  # orden creada, esperando el Pago Móvil (vence en ORDER_TTL_MINUTES)
     PAYMENT_SUBMITTED = "PAYMENT_SUBMITTED"  # el cliente envió la referencia; falta verificarla
-    PAID = "PAID"  # el admin verificó el pago en el banco
+    PAID = "PAID"  # el vendedor (o el admin) verificó el pago en el banco
     PROCESSING = "PROCESSING"
     SHIPPED = "SHIPPED"
     DELIVERED = "DELIVERED"
@@ -177,7 +177,15 @@ class Order(Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), index=True
     )
-    total_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Cada orden es de UN vendedor: el cliente le paga directo a su Pago Móvil.
+    seller_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sellers.id", ondelete="RESTRICT"), index=True
+    )
+    # Un carrito con varios vendedores genera varias órdenes con el mismo checkout_id.
+    checkout_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    subtotal_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))  # productos
+    shipping_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
+    total_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2))  # subtotal + envío
     total_ves: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     # Extras útiles: la tasa usada al comprar y la referencia del Pago Móvil.
     bcv_rate: Mapped[Decimal] = mapped_column(Numeric(14, 4))
@@ -195,6 +203,12 @@ class Order(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancel_reason: Mapped[str | None] = mapped_column(String(200))
 
+    # Despacho: agencia y número de guía que carga el vendedor al enviar.
+    carrier: Mapped[str | None] = mapped_column(String(40))
+    tracking_number: Mapped[str | None] = mapped_column(String(60))
+    shipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     # Datos de contacto y envío tal como los escribió el cliente en ESTE pedido.
     shipping_name: Mapped[str] = mapped_column(String(120))
     shipping_cedula: Mapped[str] = mapped_column(String(12))
@@ -205,6 +219,7 @@ class Order(Base):
     shipping_reference: Mapped[str | None] = mapped_column(String(255))
 
     customer: Mapped[Customer] = relationship(back_populates="orders")
+    seller: Mapped[Seller] = relationship()
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
     )

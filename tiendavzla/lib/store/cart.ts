@@ -53,9 +53,10 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: "tiendavzla-cart",
-      // v1: los ids pasaron de "p-001" (mock) a UUID de la base de datos,
-      // así que los carritos guardados con la versión anterior se descartan.
-      version: 1,
+      // v1: los ids pasaron de "p-001" (mock) a UUID de la base de datos.
+      // v2: cada producto trae su vendedor y costo de envío (marketplace).
+      // Los carritos guardados con una versión anterior se descartan.
+      version: 2,
       migrate: (): PersistedCartState => ({ items: [] }),
       storage: createJSONStorage(() => localStorage),
       // Solo guardamos los items; el drawer siempre arranca cerrado.
