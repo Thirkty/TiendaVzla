@@ -1,6 +1,6 @@
 "use client";
 // SellerDashboard: panel del vendedor. Estado de la tienda (en revisión / activa /
-// suspendida), sus productos y los datos de la tienda (WhatsApp y Pago Móvil).
+// suspendida), sus pedidos, sus productos y los datos de la tienda (WhatsApp y Pago Móvil).
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
@@ -15,12 +15,13 @@ import StoreProfileFields from "@/components/account/StoreProfileFields";
 import PanelHeader from "@/components/panel/PanelHeader";
 import { useRequireSession } from "@/components/panel/useRequireSession";
 import ProductEditor from "./ProductEditor";
+import SellerOrders from "./SellerOrders";
 
-type Tab = "products" | "store";
+type Tab = "orders" | "products" | "store";
 
 export default function SellerDashboard() {
   const { me, error, reload, logout } = useRequireSession();
-  const [tab, setTab] = useState<Tab>("products");
+  const [tab, setTab] = useState<Tab>("orders");
 
   if (error) return <p className="p-8 text-center text-brand-dark">{error}</p>;
   if (!me) return <div className="mx-auto mt-16 h-64 max-w-4xl animate-pulse rounded-2xl bg-line/50" />;
@@ -48,6 +49,7 @@ export default function SellerDashboard() {
         <nav className="mt-6 flex gap-2" aria-label="Secciones">
           {(
             [
+              ["orders", "Pedidos"],
               ["products", "Productos"],
               ["store", "Datos de la tienda"],
             ] as const
@@ -67,7 +69,9 @@ export default function SellerDashboard() {
         </nav>
 
         <div className="mt-6">
-          {tab === "products" ? (
+          {tab === "orders" ? (
+            <SellerOrders />
+          ) : tab === "products" ? (
             <ProductsTab readOnly={seller.status === "SUSPENDED"} />
           ) : (
             <StoreTab seller={seller} readOnly={seller.status === "SUSPENDED"} onSaved={reload} />

@@ -8,11 +8,12 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, ShieldAlert } from "lucide-react";
 import { adminApi, type OrdersSummary } from "@/lib/api/admin";
 import { SessionApiError } from "@/lib/api/session";
-import type { AdminOrder, OrderStatus } from "@/lib/api/types";
+import type { AdminOrder, OrderStatus, SellerOrder } from "@/lib/api/types";
+import type { StatusChangeExtra } from "@/lib/orderStatus";
 import { STATUS_LABEL, STATUS_TABS } from "@/lib/orderStatus";
 import PanelHeader from "@/components/panel/PanelHeader";
 import { useRequireSession } from "@/components/panel/useRequireSession";
-import OrderCard from "./OrderCard";
+import OrderCard from "@/components/orders/OrderCard";
 import RateCard from "./RateCard";
 import SellersAdmin from "./SellersAdmin";
 
@@ -108,9 +109,9 @@ function OrdersSection({ onApiError }: { onApiError: (err: unknown) => void }) {
     return () => clearInterval(id);
   }, [load]);
 
-  const changeStatus = async (order: AdminOrder, to: OrderStatus, reason?: string) => {
+  const changeStatus = async (order: SellerOrder, to: OrderStatus, extra?: StatusChangeExtra) => {
     try {
-      await adminApi.updateStatus(order.id, to, reason);
+      await adminApi.updateStatus(order.id, to, extra);
     } catch (err) {
       onApiError(err);
       throw err;
@@ -177,7 +178,9 @@ function OrdersSection({ onApiError }: { onApiError: (err: unknown) => void }) {
             No hay pedidos en “{STATUS_LABEL[tab]}”.
           </p>
         ) : (
-          orders.map((order) => <OrderCard key={order.id} order={order} onChangeStatus={changeStatus} />)
+          orders.map((order) => (
+            <OrderCard key={order.id} order={order} showSeller onChangeStatus={changeStatus} />
+          ))
         )}
       </div>
     </>

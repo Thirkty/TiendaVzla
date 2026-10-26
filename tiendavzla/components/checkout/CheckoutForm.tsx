@@ -5,7 +5,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Lock } from "lucide-react";
-import { ApiError, createOrder } from "@/lib/api/client";
+import { ApiError, createOrders } from "@/lib/api/client";
 import type { CartItem, CustomerField, CustomerInput, Order } from "@/lib/api/types";
 import {
   normalizeCedula,
@@ -17,7 +17,7 @@ import {
 
 interface CheckoutFormProps {
   items: CartItem[];
-  onCreated: (order: Order) => void;
+  onCreated: (orders: Order[]) => void;
 }
 
 const EMPTY: CustomerInput = {
@@ -62,7 +62,7 @@ export default function CheckoutForm({ items, onCreated }: CheckoutFormProps) {
 
     setSubmitting(true);
     try {
-      onCreated(await createOrder(customer, items));
+      onCreated(await createOrders(customer, items));
     } catch (error) {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors);

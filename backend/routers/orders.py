@@ -1,5 +1,7 @@
-"""Endpoints del checkout, envío de la referencia de pago y administración de órdenes."""
+"""Endpoints del checkout (un pedido por vendedor), envío de la referencia de pago y
+administración de órdenes."""
 import uuid
+from collections import defaultdict
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated
@@ -7,13 +9,27 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from auth import require_admin
 from database import ORDER_TTL_MINUTES, get_db
-from models import Customer, Order, OrderItem, OrderStatus, Product
-from schemas import AdminOrderOut, CheckoutIn, OrderOut, OrderStatusUpdateIn, PaymentIn
-from services.orders import ADMIN_TRANSITIONS, cancel_order, is_expired, lock_order, now
+from models import Customer, Order, OrderItem, OrderStatus, Product, SellerStatus
+from schemas import (
+    AdminOrderOut,
+    CheckoutIn,
+    CheckoutOut,
+    OrderOut,
+    OrderStatusUpdateIn,
+    PaymentIn,
+)
+from services.orders import (
+    TransitionError,
+    cancel_order,
+    change_status,
+    is_expired,
+    lock_order,
+    now,
+)
 from services.rates import get_current_rate
 
 router = APIRouter(prefix="/api", tags=["Órdenes"])
@@ -25,17 +41,18 @@ CENTS = Decimal("0.01")
 # ---------- Helpers ----------
 
 
-def _order_query():
-    """Consulta de órdenes con items, productos y cliente precargados."""
+def order_query():
+    """Consulta de órdenes con items, productos, vendedor y cliente precargados."""
     return select(Order).options(
         selectinload(Order.items).selectinload(OrderItem.product),
         selectinload(Order.customer),
+        joinedload(Order.seller),
     )
 
 
-def _load_order(db: Session, order_id: uuid.UUID) -> Order:
+def load_order(db: Session, order_id: uuid.UUID) -> Order:
     order = db.scalar(
-        _order_query()
+        order_query()
         .where(Order.id == order_id)
         .execution_options(populate_existing=True)  # refresca datos tras el commit
     )
@@ -44,15 +61,40 @@ def _load_order(db: Session, order_id: uuid.UUID) -> Order:
     return order
 
 
+def money(value: Decimal) -> Decimal:
+    return value.quantize(CENTS, rounding=ROUND_HALF_UP)
+
+
+def apply_status_change(
+    db: Session, order: Order, payload: OrderStatusUpdateIn, *, cancelled_by: str
+) -> None:
+    """Aplica el cambio pedido o responde 400 con el motivo."""
+    try:
+        change_status(
+            order,
+            payload.status,
+            reason=payload.reason,
+            carrier=payload.carrier,
+            tracking_number=payload.tracking_number,
+            cancelled_by=cancelled_by,
+        )
+    except TransitionError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    db.commit()
+
+
 # ---------- Checkout ----------
 
 
-@router.post("/checkout", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
-def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
-    """Valida stock, calcula totales con precios de la BD y crea la orden en PENDING.
+@router.post("/checkout", response_model=CheckoutOut, status_code=status.HTTP_201_CREATED)
+def checkout(payload: CheckoutIn, db: DbSession) -> CheckoutOut:
+    """Valida stock y crea UNA orden PENDING por vendedor (todas con el mismo checkoutId).
 
-    El stock se descuenta al crear la orden y queda apartado ORDER_TTL_MINUTES;
-    si en ese tiempo no llega la referencia de pago, la orden se cancela sola.
+    Cada orden se paga por separado al Pago Móvil de su vendedor. Precios y envío salen
+    de la BD, nunca del cliente. El envío de cada vendedor es el mayor costo de envío de
+    sus productos en el carrito (se despacha en un solo paquete).
+    El stock queda apartado ORDER_TTL_MINUTES; si no llega la referencia, se libera.
     """
     # 1. Agrupar cantidades por producto (por si el carrito trae duplicados).
     quantities: dict[uuid.UUID, int] = {}
@@ -63,8 +105,9 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
     products = db.scalars(
         select(Product)
         .where(Product.id.in_(list(quantities)))
+        .options(joinedload(Product.seller))
         .order_by(Product.id)  # orden fijo para evitar deadlocks
-        .with_for_update()
+        .with_for_update(of=Product)
     ).all()
     by_id = {p.id: p for p in products}
 
@@ -74,6 +117,18 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"message": "Algunos productos no existen", "productIds": missing},
+        )
+
+    unavailable = [
+        by_id[pid].name
+        for pid in quantities
+        if not by_id[pid].is_active or by_id[pid].seller.status != SellerStatus.ACTIVE
+    ]
+    if unavailable:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "Ya no están disponibles: " + ", ".join(unavailable), "items": []},
         )
 
     out_of_stock = [
@@ -93,14 +148,7 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
             detail={"message": "Stock insuficiente", "items": out_of_stock},
         )
 
-    # 3. Totales (siempre con el precio de la BD, nunca el que manda el cliente).
-    total_usd = sum(
-        (by_id[pid].price_usd * qty for pid, qty in quantities.items()), Decimal("0")
-    ).quantize(CENTS, rounding=ROUND_HALF_UP)
-    bcv_rate = get_current_rate(db).rate
-    total_ves = (total_usd * bcv_rate).quantize(CENTS, rounding=ROUND_HALF_UP)
-
-    # 4. Vincular al cliente por cédula. Si ya existe NO se tocan sus datos: cualquiera
+    # 3. Vincular al cliente por cédula. Si ya existe NO se tocan sus datos: cualquiera
     #    puede escribir una cédula ajena, así que eso no puede cambiar datos de otro.
     data = payload.customer
     customer = db.scalar(select(Customer).where(Customer.cedula == data.cedula))
@@ -116,30 +164,53 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
         )
         db.add(customer)
 
-    # 5. Crear la orden y descontar stock.
-    order = Order(
-        customer=customer,
-        # Los datos de este envío se guardan en la orden, tal como los escribió el cliente.
-        shipping_name=data.name,
-        shipping_cedula=data.cedula,
-        shipping_phone=data.phone,
-        shipping_state=data.address_state,
-        shipping_city=data.address_city,
-        shipping_street=data.address_street,
-        shipping_reference=data.address_reference,
-        total_usd=total_usd,
-        total_ves=total_ves,
-        bcv_rate=bcv_rate,
-        status=OrderStatus.PENDING,
-        expires_at=now() + timedelta(minutes=ORDER_TTL_MINUTES),
-        items=[
-            OrderItem(product_id=pid, quantity=qty, price_at_purchase=by_id[pid].price_usd)
-            for pid, qty in quantities.items()
-        ],
-    )
+    # 4. Una orden por vendedor.
+    by_seller: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    for pid in quantities:
+        by_seller[by_id[pid].seller_id].append(pid)
+
+    bcv_rate = get_current_rate(db).rate
+    checkout_id = uuid.uuid4()
+    expires_at = now() + timedelta(minutes=ORDER_TTL_MINUTES)
+    for seller_id, product_ids in by_seller.items():
+        subtotal = money(
+            sum((by_id[pid].price_usd * quantities[pid] for pid in product_ids), Decimal("0"))
+        )
+        shipping = money(max(by_id[pid].shipping_cost_usd for pid in product_ids))
+        total = subtotal + shipping
+        db.add(
+            Order(
+                customer=customer,
+                seller_id=seller_id,
+                checkout_id=checkout_id,
+                # Los datos de este envío se guardan en la orden, tal como los escribió el cliente.
+                shipping_name=data.name,
+                shipping_cedula=data.cedula,
+                shipping_phone=data.phone,
+                shipping_state=data.address_state,
+                shipping_city=data.address_city,
+                shipping_street=data.address_street,
+                shipping_reference=data.address_reference,
+                subtotal_usd=subtotal,
+                shipping_usd=shipping,
+                total_usd=total,
+                total_ves=money(total * bcv_rate),
+                bcv_rate=bcv_rate,
+                status=OrderStatus.PENDING,
+                expires_at=expires_at,
+                items=[
+                    OrderItem(
+                        product_id=pid,
+                        quantity=quantities[pid],
+                        price_at_purchase=by_id[pid].price_usd,
+                    )
+                    for pid in product_ids
+                ],
+            )
+        )
+
     for pid, qty in quantities.items():
         by_id[pid].stock -= qty
-    db.add(order)
 
     try:
         db.commit()
@@ -147,10 +218,13 @@ def checkout(payload: CheckoutIn, db: DbSession) -> OrderOut:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No se pudo registrar la orden. Intenta de nuevo.",
+            detail="No se pudo registrar el pedido. Intenta de nuevo.",
         ) from exc
 
-    return OrderOut.model_validate(_load_order(db, order.id))
+    orders = db.scalars(
+        order_query().where(Order.checkout_id == checkout_id).order_by(Order.total_usd.desc())
+    ).all()
+    return CheckoutOut(checkout_id=checkout_id, orders=[OrderOut.model_validate(o) for o in orders])
 
 
 # ---------- Pago ----------
@@ -164,7 +238,7 @@ def submit_payment(
 ) -> OrderOut:
     """El cliente envía la referencia del Pago Móvil: PENDING -> PAYMENT_SUBMITTED.
 
-    El pago NO queda confirmado: el admin lo verifica en el banco y lo aprueba.
+    El pago NO queda confirmado: el vendedor lo verifica en su banco y lo aprueba.
     """
     order = lock_order(db, order_id)
     if order is None:
@@ -190,7 +264,7 @@ def submit_payment(
     order.expires_at = None  # ya no vence: queda esperando la verificación
     db.commit()
 
-    return OrderOut.model_validate(_load_order(db, order_id))
+    return OrderOut.model_validate(load_order(db, order_id))
 
 
 # ---------- Admin ----------
@@ -207,8 +281,8 @@ def list_orders(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminOrderOut]:
-    """Lista los pedidos (más recientes primero). Requiere el header X-Admin-Key."""
-    stmt = _order_query().order_by(Order.created_at.desc()).limit(limit).offset(offset)
+    """Lista los pedidos de todos los vendedores (más recientes primero)."""
+    stmt = order_query().order_by(Order.created_at.desc()).limit(limit).offset(offset)
     if status_filter is not None:
         stmt = stmt.where(Order.status == status_filter)
     orders = db.scalars(stmt).all()
@@ -238,36 +312,10 @@ def update_order_status(
     payload: OrderStatusUpdateIn,
     db: DbSession,
 ) -> AdminOrderOut:
-    """Cambia el estado de una orden respetando el flujo permitido.
-
-    - PAYMENT_SUBMITTED -> PAID: pago verificado en el banco.
-    - PAYMENT_SUBMITTED -> PENDING: referencia rechazada; el cliente puede reenviarla.
-    - Cualquier cancelación devuelve el stock.
-    """
+    """Cambia el estado de cualquier orden (soporte y disputas), con las mismas reglas
+    que el vendedor."""
     order = lock_order(db, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada")
-
-    target = payload.status
-    if target not in ADMIN_TRANSITIONS[order.status]:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No se puede pasar de {order.status.value} a {target.value}",
-        )
-
-    if target == OrderStatus.CANCELLED:
-        cancel_order(order, payload.reason or "Cancelada por el administrador")
-    elif target == OrderStatus.PENDING:
-        # Referencia rechazada: se limpia y el cliente tiene otro plazo para pagar.
-        order.status = OrderStatus.PENDING
-        order.payment_reference = None
-        order.payment_submitted_at = None
-        order.expires_at = now() + timedelta(minutes=ORDER_TTL_MINUTES)
-    else:
-        order.status = target
-        if target == OrderStatus.PAID:
-            order.paid_at = now()
-
-    db.commit()
-    return AdminOrderOut.model_validate(_load_order(db, order_id))
+    apply_status_change(db, order, payload, cancelled_by="el administrador")
+    return AdminOrderOut.model_validate(load_order(db, order_id))

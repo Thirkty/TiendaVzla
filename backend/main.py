@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from database import BCV_AUTO_UPDATE, CORS_ORIGINS, RATE_REFRESH_HOURS, SessionLocal, engine
-from routers import accounts, admin_sellers, orders, products, rates, seller
+from routers import accounts, admin_sellers, orders, products, rates, seller, seller_orders
 from services.catalog import UPLOAD_PATH
 from services.orders import expire_pending_orders
 from services.rates import refresh_official_rate
@@ -85,6 +85,7 @@ app.include_router(orders.router)
 app.include_router(rates.router)
 app.include_router(accounts.router)
 app.include_router(seller.router)
+app.include_router(seller_orders.router)
 app.include_router(admin_sellers.router)
 
 # Imágenes subidas por los vendedores (en producción conviene servirlas desde un CDN).

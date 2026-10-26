@@ -1,47 +1,37 @@
 "use client";
-// PagoMovilStep: muestra los datos del Pago Móvil y el monto exacto en Bs.,
-// muestra cuánto tiempo queda para pagar y envía la referencia con POST /api/orders/{id}/pay.
-// El pago queda "en verificación" hasta que el admin lo confirma en el banco.
+// PagoMovilStep: un pago por vendedor. Cada tarjeta muestra el monto exacto en Bs. y el
+// Pago Móvil de ESE vendedor, y envía su referencia con POST /api/orders/{id}/pay.
+// Cada vendedor verifica su pago en su banco. Arriba se ve cuánto tiempo queda para pagar.
 
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Check, Clock, Copy, Loader2, Smartphone } from "lucide-react";
+import { Check, CircleCheck, Clock, Copy, Loader2, Smartphone } from "lucide-react";
 import { ApiError, confirmPayment } from "@/lib/api/client";
 import type { Order } from "@/lib/api/types";
-import { PAGO_MOVIL } from "@/lib/payment";
 import { formatBs, formatUsd } from "@/lib/utils/format";
 import { isValidReference } from "@/lib/utils/validation";
 
 interface PagoMovilStepProps {
-  order: Order;
-  onPaid: (order: Order) => void;
-  /** La orden venció: el padre limpia el estado y vuelve al formulario. */
+  orders: Order[];
+  onUpdated: (order: Order) => void;
+  /** Las órdenes vencieron: el padre limpia el estado y vuelve a la tienda. */
   onExpired: () => void;
 }
 
-export default function PagoMovilStep({ order, onPaid, onExpired }: PagoMovilStepProps) {
-  const remaining = useCountdown(order.expiresAt);
-  const [reference, setReference] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+export default function PagoMovilStep({ orders, onUpdated, onExpired }: PagoMovilStepProps) {
+  const pending = orders.filter((o) => o.status === "PENDING");
+  const deadline = pending.map((o) => o.expiresAt).filter(Boolean).sort()[0] ?? null;
+  const remaining = useCountdown(deadline);
+  const totalVes = orders.reduce((sum, o) => sum + o.totalVes, 0);
 
-  // Monto sin símbolo ni separador de miles: es lo que se escribe en la app del banco.
-  const amountToCopy = order.totalVes.toFixed(2).replace(".", ",");
-
-  const rows = [
-    { label: "Banco", value: PAGO_MOVIL.bank },
-    { label: "Teléfono", value: PAGO_MOVIL.phone, copy: PAGO_MOVIL.phone.replace(/\D/g, "") },
-    { label: "Cédula / RIF", value: PAGO_MOVIL.idNumber, copy: PAGO_MOVIL.idNumber },
-  ];
-
-  if (remaining === 0) {
+  if (remaining === 0 && pending.length > 0) {
     return (
       <div className="rounded-2xl border border-line bg-white p-8 text-center shadow-sm">
         <Clock className="mx-auto size-12 text-brand" strokeWidth={1.5} />
         <h2 className="mt-3 text-xl font-bold">Se acabó el tiempo para pagar</h2>
         <p className="mt-2 text-ink/60">
-          Liberamos los productos de este pedido. Si ya hiciste el Pago Móvil, escríbenos por
-          WhatsApp con la referencia y lo resolvemos.
+          Liberamos los productos que no se pagaron. Si ya hiciste un Pago Móvil, escríbele al
+          vendedor por WhatsApp con la referencia.
         </p>
         <button
           type="button"
@@ -54,6 +44,69 @@ export default function PagoMovilStep({ order, onPaid, onExpired }: PagoMovilSte
     );
   }
 
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-deep p-6 text-white shadow-lg">
+        <div className="flex items-center gap-2 text-sm font-medium text-white/70">
+          <Smartphone className="size-4" />
+          {orders.length > 1
+            ? `Total de tu compra · ${orders.length} pagos, uno por vendedor`
+            : "Monto a pagar por Pago Móvil"}
+        </div>
+        <p className="mt-2 text-4xl font-extrabold tabular-nums">{formatBs(totalVes)}</p>
+        {orders.length > 1 && (
+          <p className="mt-1 text-sm text-white/60">
+            Cada vendedor recibe su pago directo; haz un Pago Móvil a cada uno.
+          </p>
+        )}
+        {remaining !== null && pending.length > 0 && (
+          <p className="mt-4 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm">
+            <Clock className="size-4 shrink-0" />
+            Tus productos están apartados por{" "}
+            <span className="font-bold tabular-nums">{formatRemaining(remaining)}</span>
+          </p>
+        )}
+      </div>
+
+      {orders.map((order, i) => (
+        <SellerPaymentCard
+          key={order.id}
+          order={order}
+          step={orders.length > 1 ? `Pago ${i + 1} de ${orders.length}` : null}
+          onUpdated={onUpdated}
+        />
+      ))}
+
+      <p className="text-center text-xs text-ink/50">
+        Cada vendedor verifica su pago en el banco antes de despachar.
+      </p>
+    </div>
+  );
+}
+
+function SellerPaymentCard({
+  order,
+  step,
+  onUpdated,
+}: {
+  order: Order;
+  step: string | null;
+  onUpdated: (order: Order) => void;
+}) {
+  const [reference, setReference] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const { seller } = order;
+  const inputId = `reference-${order.id}`;
+
+  // Monto sin símbolo ni separador de miles: es lo que se escribe en la app del banco.
+  const amountToCopy = order.totalVes.toFixed(2).replace(".", ",");
+  const rows = [
+    { label: "Banco", value: seller.pagoMovilBank },
+    { label: "Teléfono", value: seller.pagoMovilPhone, copy: seller.pagoMovilPhone },
+    { label: "Cédula / RIF", value: seller.pagoMovilId, copy: seller.pagoMovilId },
+  ];
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const cleaned = reference.trim();
@@ -64,98 +117,92 @@ export default function PagoMovilStep({ order, onPaid, onExpired }: PagoMovilSte
     setError(null);
     setSubmitting(true);
     try {
-      onPaid(await confirmPayment(order.id, cleaned));
+      onUpdated(await confirmPayment(order.id, cleaned));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Algo salió mal. Intenta de nuevo.");
       setSubmitting(false);
     }
   };
 
+  const submitted = order.status !== "PENDING";
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl bg-deep p-6 text-white shadow-lg">
-        <div className="flex items-center gap-2 text-sm font-medium text-white/70">
-          <Smartphone className="size-4" />
-          Monto a pagar por Pago Móvil
-        </div>
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-          <p className="text-4xl font-extrabold tabular-nums">{formatBs(order.totalVes)}</p>
-          <CopyButton text={amountToCopy} label="Copiar monto" dark />
-        </div>
-        <p className="mt-2 text-sm text-white/60">
-          {formatUsd(order.totalUsd)} a tasa BCV {order.bcvRate.toLocaleString("es-VE")} Bs/$
-        </p>
-        {remaining !== null && (
-          <p className="mt-4 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm">
-            <Clock className="size-4 shrink-0" />
-            Tus productos están apartados por{" "}
-            <span className="font-bold tabular-nums">{formatRemaining(remaining)}</span>
+    <section className="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line p-5">
+        <div>
+          {step && <p className="text-xs font-semibold uppercase tracking-wider text-brand">{step}</p>}
+          <h2 className="text-lg font-bold">{seller.storeName}</h2>
+          <p className="text-sm text-ink/60">
+            {order.items.map((i) => `${i.quantity}× ${i.product.name}`).join(" · ")}
           </p>
-        )}
-      </div>
-
-      <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-bold">Datos para el Pago Móvil</h2>
-        <dl className="mt-3 divide-y divide-line">
-          {rows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between gap-3 py-3">
-              <dt className="text-sm text-ink/60">{row.label}</dt>
-              <dd className="flex items-center gap-2 font-semibold tabular-nums">
-                {row.value}
-                {row.copy && <CopyButton text={row.copy} label={`Copiar ${row.label}`} />}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <form
-        onSubmit={handleSubmit}
-        noValidate
-        className="rounded-2xl border border-line bg-white p-5 shadow-sm"
-      >
-        <label htmlFor="reference" className="block text-lg font-bold">
-          ¿Ya pagaste? Escribe la referencia
-        </label>
-        <p className="mt-1 text-sm text-ink/60">
-          Son los últimos dígitos del comprobante que te muestra tu banco.
-        </p>
-        <input
-          id="reference"
-          value={reference}
-          onChange={(e) => {
-            setReference(e.target.value.replace(/\D/g, ""));
-            setError(null);
-          }}
-          inputMode="numeric"
-          maxLength={12}
-          placeholder="Ej: 004512"
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? "reference-error" : undefined}
-          className={`mt-4 w-full rounded-xl border bg-white px-4 py-3 text-lg tracking-widest outline-none transition placeholder:tracking-normal placeholder:text-ink/35 focus:border-brand focus:ring-4 focus:ring-brand/15 ${error ? "border-brand" : "border-line"}`}
-        />
-        {error && (
-          <p id="reference-error" role="alert" className="mt-1.5 text-sm text-brand-dark">
-            {error}
+        </div>
+        <div className="text-right">
+          <div className="flex items-center justify-end gap-1">
+            <p className="text-2xl font-extrabold tabular-nums">{formatBs(order.totalVes)}</p>
+            {!submitted && <CopyButton text={amountToCopy} label="Copiar monto" />}
+          </div>
+          <p className="text-xs text-ink/50">
+            {formatUsd(order.subtotalUsd)} +{" "}
+            {order.shippingUsd > 0 ? `${formatUsd(order.shippingUsd)} envío` : "envío gratis"} · tasa{" "}
+            {order.bcvRate.toLocaleString("es-VE")}
           </p>
-        )}
+        </div>
+      </header>
 
-        <motion.button
-          type="submit"
-          disabled={submitting}
-          whileTap={{ scale: 0.98 }}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-lg font-semibold text-white shadow-sm transition hover:bg-brand-dark hover:shadow-lg disabled:cursor-wait disabled:opacity-70"
-        >
-          {submitting && <Loader2 className="size-5 animate-spin" />}
-          {submitting ? "Enviando…" : "Ya pagué, enviar referencia"}
-        </motion.button>
-      </form>
+      {submitted ? (
+        <p className="flex items-center gap-2 bg-success/10 px-5 py-4 text-sm font-medium text-deep">
+          <CircleCheck className="size-5 text-success" />
+          Referencia {order.paymentReference} enviada. {seller.storeName} la está verificando.
+        </p>
+      ) : (
+        <div className="grid gap-5 p-5 sm:grid-cols-2">
+          <dl className="divide-y divide-line rounded-xl bg-cream px-4">
+            {rows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between gap-3 py-2.5">
+                <dt className="text-sm text-ink/60">{row.label}</dt>
+                <dd className="flex items-center gap-1 text-sm font-semibold tabular-nums">
+                  {row.value}
+                  {row.copy && <CopyButton text={row.copy} label={`Copiar ${row.label}`} />}
+                </dd>
+              </div>
+            ))}
+          </dl>
 
-      <p className="text-center text-xs text-ink/50">
-        Pedido #{order.id.slice(0, 8).toUpperCase()} · Verificamos cada pago en el banco antes de
-        despachar.
-      </p>
-    </div>
+          <form onSubmit={handleSubmit} noValidate>
+            <label htmlFor={inputId} className="block font-bold">
+              ¿Ya pagaste? Escribe la referencia
+            </label>
+            <input
+              id={inputId}
+              value={reference}
+              onChange={(e) => {
+                setReference(e.target.value.replace(/\D/g, ""));
+                setError(null);
+              }}
+              inputMode="numeric"
+              maxLength={12}
+              placeholder="Ej: 004512"
+              aria-invalid={Boolean(error)}
+              className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 text-lg tracking-widest outline-none transition placeholder:tracking-normal placeholder:text-ink/35 focus:border-brand focus:ring-4 focus:ring-brand/15 ${error ? "border-brand" : "border-line"}`}
+            />
+            {error && (
+              <p role="alert" className="mt-1.5 text-sm text-brand-dark">
+                {error}
+              </p>
+            )}
+            <motion.button
+              type="submit"
+              disabled={submitting}
+              whileTap={{ scale: 0.98 }}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-3 font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-wait disabled:opacity-70"
+            >
+              {submitting && <Loader2 className="size-5 animate-spin" />}
+              {submitting ? "Enviando…" : "Ya pagué, enviar referencia"}
+            </motion.button>
+          </form>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -167,7 +214,10 @@ function useCountdown(deadline: string | null): number | null {
   );
 
   useEffect(() => {
-    if (target === null) return;
+    if (target === null) {
+      setRemaining(null);
+      return;
+    }
     const tick = () => setRemaining(Math.max(0, target - Date.now()));
     tick();
     const id = setInterval(tick, 1000);
@@ -186,7 +236,7 @@ function formatRemaining(ms: number): string {
   return h > 0 ? `${h}:${mmss}` : mmss;
 }
 
-function CopyButton({ text, label, dark = false }: { text: string; label: string; dark?: boolean }) {
+function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -204,7 +254,7 @@ function CopyButton({ text, label, dark = false }: { text: string; label: string
       type="button"
       onClick={copy}
       aria-label={label}
-      className={`rounded-lg p-1.5 transition-colors ${dark ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-ink/40 hover:bg-line hover:text-ink"}`}
+      className="rounded-lg p-1.5 text-ink/40 transition-colors hover:bg-line hover:text-ink"
     >
       {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
     </button>
