@@ -6,6 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -33,14 +34,99 @@ class OrderStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
+class SellerStatus(str, enum.Enum):
+    PENDING = "PENDING"  # se registró; el admin debe revisar sus datos
+    ACTIVE = "ACTIVE"  # aprobado: sus productos se ven en el catálogo
+    SUSPENDED = "SUSPENDED"  # sus productos se ocultan
+
+
+# ---------- Cuentas ----------
+
+
+class User(Base):
+    """Cuenta para entrar a la plataforma. Un vendedor es un usuario con perfil Seller."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)  # en minúsculas
+    password_hash: Mapped[str] = mapped_column(String(255))
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    seller: Mapped["Seller | None"] = relationship(back_populates="user")
+
+
+class UserSession(Base):
+    """Sesión iniciada. La cookie lleva un token aleatorio; aquí solo se guarda su hash."""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    user: Mapped[User] = relationship()
+
+
+class Seller(Base):
+    """Tienda de un vendedor. Recibe los pagos directo en su Pago Móvil."""
+
+    __tablename__ = "sellers"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    # None solo para la tienda de la casa mientras ningún admin la reclame.
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), unique=True
+    )
+    store_name: Mapped[str] = mapped_column(String(80))
+    slug: Mapped[str] = mapped_column(String(90), unique=True, index=True)
+    whatsapp: Mapped[str] = mapped_column(String(11))
+    pago_movil_bank: Mapped[str] = mapped_column(String(80))
+    pago_movil_phone: Mapped[str] = mapped_column(String(11))
+    pago_movil_id: Mapped[str] = mapped_column(String(12))  # cédula o RIF
+    status: Mapped[SellerStatus] = mapped_column(
+        Enum(SellerStatus, name="seller_status"), default=SellerStatus.PENDING, index=True
+    )
+    status_note: Mapped[str | None] = mapped_column(String(200))  # motivo de suspensión
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User | None] = relationship(back_populates="seller")
+    products: Mapped[list["Product"]] = relationship(back_populates="seller")
+
+
+# ---------- Catálogo ----------
+
+
 class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         CheckConstraint("stock >= 0", name="ck_products_stock_non_negative"),
         CheckConstraint("price_usd >= 0", name="ck_products_price_non_negative"),
+        CheckConstraint("shipping_cost_usd >= 0", name="ck_products_shipping_non_negative"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    seller_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sellers.id", ondelete="RESTRICT"), index=True
+    )
+    # Publicado: el vendedor lo puede ocultar sin borrarlo (las órdenes lo referencian).
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    # Costo de envío que define el vendedor (0 = gratis). Se suma al total en la Fase 2B.
+    shipping_cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
     slug: Mapped[str] = mapped_column(String(160), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
@@ -55,6 +141,11 @@ class Product(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+
+    seller: Mapped[Seller] = relationship(back_populates="products")
 
 
 class Customer(Base):

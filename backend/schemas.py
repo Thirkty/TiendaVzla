@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -19,7 +20,7 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 
-from models import OrderStatus
+from models import OrderStatus, SellerStatus
 
 # Los Decimal se envían como número en el JSON (no como string).
 Money = Annotated[Decimal, PlainSerializer(float, return_type=float, when_used="json")]
@@ -29,6 +30,47 @@ CleanStr = Annotated[str, StringConstraints(strip_whitespace=True)]
 CEDULA_RE = re.compile(r"^(?:[VE]-\d{6,8}|[JG]-\d{9})$")
 PHONE_RE = re.compile(r"^04(?:12|14|16|24|26)\d{7}$")
 REFERENCE_RE = re.compile(r"^\d{4,12}$")
+BANK_RE = re.compile(r"^\d{4} - .{2,70}$")  # "0134 - Banesco"
+
+
+def _normalize_cedula(value: str) -> str:
+    """'v 12.345.678' -> 'V-12345678'"""
+    cleaned = re.sub(r"[\s.]", "", value).upper()
+    if re.fullmatch(r"[VEJG]\d+", cleaned):
+        cleaned = f"{cleaned[0]}-{cleaned[1:]}"
+    if not CEDULA_RE.fullmatch(cleaned):
+        raise ValueError(
+            "Cédula/RIF inválido. Formatos aceptados: V-12345678, E-12345678, "
+            "J-123456789 o G-123456789"
+        )
+    return cleaned
+
+
+def _normalize_phone(value: str) -> str:
+    """'+58 414-123.45.67' -> '04141234567'"""
+    cleaned = re.sub(r"[\s\-().]", "", value)
+    if cleaned.startswith("+58"):
+        cleaned = "0" + cleaned[3:]
+    elif cleaned.startswith("58") and len(cleaned) == 12:
+        cleaned = "0" + cleaned[2:]
+    if not PHONE_RE.fullmatch(cleaned):
+        raise ValueError(
+            "Teléfono inválido. Debe ser un móvil venezolano "
+            "(0412, 0414, 0416, 0424 o 0426) seguido de 7 dígitos"
+        )
+    return cleaned
+
+
+def _check_bank(value: str) -> str:
+    value = value.strip()
+    if not BANK_RE.fullmatch(value):
+        raise ValueError("Elige el banco de la lista (ej: 0134 - Banesco)")
+    return value
+
+
+Cedula = Annotated[str, AfterValidator(_normalize_cedula), Field(examples=["V-12345678"])]
+VePhone = Annotated[str, AfterValidator(_normalize_phone), Field(examples=["04141234567"])]
+BankName = Annotated[str, AfterValidator(_check_bank), Field(examples=["0134 - Banesco"])]
 
 
 class ApiModel(BaseModel):
@@ -50,6 +92,14 @@ class InputModel(ApiModel):
 # ---------- Productos ----------
 
 
+class SellerSummary(ApiModel):
+    """Lo que el catálogo muestra del vendedor."""
+
+    id: uuid.UUID
+    store_name: str
+    slug: str
+
+
 class ProductOut(ApiModel):
     id: uuid.UUID
     slug: str
@@ -63,6 +113,8 @@ class ProductOut(ApiModel):
     badge: str | None = None
     rating: float
     reviews_count: int
+    shipping_cost_usd: Money
+    seller: SellerSummary
     created_at: datetime
 
 
@@ -77,43 +129,13 @@ class ProductSummary(ApiModel):
 
 
 class CustomerIn(InputModel):
-    cedula: str = Field(examples=["V-12345678"])
+    cedula: Cedula
     name: Annotated[CleanStr, StringConstraints(min_length=3, max_length=120)]
-    phone: str = Field(examples=["04141234567"])
+    phone: VePhone
     address_state: Annotated[CleanStr, StringConstraints(min_length=2, max_length=60)]
     address_city: Annotated[CleanStr, StringConstraints(min_length=2, max_length=80)]
     address_street: Annotated[CleanStr, StringConstraints(min_length=5, max_length=255)]
     address_reference: Annotated[CleanStr, StringConstraints(max_length=255)] | None = None
-
-    @field_validator("cedula")
-    @classmethod
-    def validate_cedula(cls, value: str) -> str:
-        # Normaliza: "v 12.345.678" -> "V-12345678"
-        cleaned = re.sub(r"[\s.]", "", value).upper()
-        if re.fullmatch(r"[VEJG]\d+", cleaned):
-            cleaned = f"{cleaned[0]}-{cleaned[1:]}"
-        if not CEDULA_RE.fullmatch(cleaned):
-            raise ValueError(
-                "Cédula/RIF inválido. Formatos aceptados: V-12345678, E-12345678, "
-                "J-123456789 o G-123456789"
-            )
-        return cleaned
-
-    @field_validator("phone")
-    @classmethod
-    def validate_phone(cls, value: str) -> str:
-        # Normaliza: "+58 414-123.45.67" -> "04141234567"
-        cleaned = re.sub(r"[\s\-().]", "", value)
-        if cleaned.startswith("+58"):
-            cleaned = "0" + cleaned[3:]
-        elif cleaned.startswith("58") and len(cleaned) == 12:
-            cleaned = "0" + cleaned[2:]
-        if not PHONE_RE.fullmatch(cleaned):
-            raise ValueError(
-                "Teléfono inválido. Debe ser un móvil venezolano "
-                "(0412, 0414, 0416, 0424 o 0426) seguido de 7 dígitos"
-            )
-        return cleaned
 
 
 class CustomerOut(ApiModel):
@@ -237,3 +259,103 @@ class RateStatusOut(ApiModel):
 
 class RateIn(InputModel):
     rate: Decimal = Field(gt=0, le=Decimal("100000000"), max_digits=14, decimal_places=4)
+
+
+# ---------- Cuentas ----------
+
+Email = Annotated[
+    CleanStr,
+    StringConstraints(min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"),
+]
+Password = Annotated[str, StringConstraints(min_length=8, max_length=128)]
+
+
+class LoginIn(InputModel):
+    email: Email
+    password: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+
+
+class SellerProfileIn(InputModel):
+    """Datos de la tienda (registro y edición)."""
+
+    store_name: Annotated[CleanStr, StringConstraints(min_length=3, max_length=80)]
+    whatsapp: VePhone
+    pago_movil_bank: BankName
+    pago_movil_phone: VePhone
+    pago_movil_id: Cedula
+
+
+class SellerRegisterIn(SellerProfileIn):
+    email: Email
+    password: Password
+
+
+class SellerOut(ApiModel):
+    id: uuid.UUID
+    store_name: str
+    slug: str
+    whatsapp: str
+    pago_movil_bank: str
+    pago_movil_phone: str
+    pago_movil_id: str
+    status: SellerStatus
+    status_note: str | None = None
+    created_at: datetime
+    approved_at: datetime | None = None
+
+
+class MeOut(ApiModel):
+    id: uuid.UUID
+    email: str
+    is_admin: bool
+    seller: SellerOut | None = None
+
+
+class AdminSellerOut(SellerOut):
+    email: str | None = None
+    products_count: int = 0
+
+
+class SellerStatusIn(InputModel):
+    status: SellerStatus
+    note: Annotated[CleanStr, StringConstraints(max_length=200)] | None = None
+
+
+# ---------- Productos del vendedor ----------
+
+
+class SellerProductIn(InputModel):
+    name: Annotated[CleanStr, StringConstraints(min_length=3, max_length=200)]
+    description: Annotated[CleanStr, StringConstraints(max_length=5000)] = ""
+    price_usd: Decimal = Field(gt=0, le=Decimal("1000000"), decimal_places=2)
+    original_price_usd: Decimal | None = Field(default=None, gt=0, le=Decimal("1000000"), decimal_places=2)
+    shipping_cost_usd: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("10000"), decimal_places=2)
+    stock: int = Field(ge=0, le=100000)
+    image_url: Annotated[str, StringConstraints(min_length=1, max_length=500)]
+    category: Annotated[CleanStr, StringConstraints(max_length=80)] | None = None
+    badge: Annotated[CleanStr, StringConstraints(max_length=40)] | None = None
+    is_active: bool = True
+
+
+class SellerProductPatch(InputModel):
+    """Edición parcial: solo se cambian los campos enviados."""
+
+    name: Annotated[CleanStr, StringConstraints(min_length=3, max_length=200)] | None = None
+    description: Annotated[CleanStr, StringConstraints(max_length=5000)] | None = None
+    price_usd: Decimal | None = Field(default=None, gt=0, le=Decimal("1000000"), decimal_places=2)
+    original_price_usd: Decimal | None = Field(default=None, gt=0, le=Decimal("1000000"), decimal_places=2)
+    shipping_cost_usd: Decimal | None = Field(default=None, ge=0, le=Decimal("10000"), decimal_places=2)
+    stock: int | None = Field(default=None, ge=0, le=100000)
+    image_url: Annotated[str, StringConstraints(min_length=1, max_length=500)] | None = None
+    category: Annotated[CleanStr, StringConstraints(max_length=80)] | None = None
+    badge: Annotated[CleanStr, StringConstraints(max_length=40)] | None = None
+    is_active: bool | None = None
+
+
+class SellerProductOut(ProductOut):
+    is_active: bool
+    updated_at: datetime | None = None
+
+
+class UploadOut(ApiModel):
+    url: str
