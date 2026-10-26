@@ -72,7 +72,7 @@ def change_status(
     reason: str | None = None,
     carrier: str | None = None,
     tracking_number: str | None = None,
-    cancelled_by: str = "el vendedor",
+    cancelled_by: str = "la tienda",
 ) -> None:
     """Aplica un cambio de estado validado. Usar sobre una orden obtenida con lock_order.
 

@@ -1,4 +1,9 @@
-"""Panel del vendedor: su tienda, sus productos y la subida de imágenes."""
+"""Administración de la tienda: productos, fotos y configuración (Pago Móvil, WhatsApp).
+
+TiendaVzla vende con una sola tienda, la de la casa (slug "tiendavzla"). Por dentro sigue
+siendo un Seller: así los pedidos llevan sus datos de Pago Móvil y, si algún día se abre
+a otros vendedores, no hay que rehacer el modelo.
+"""
 import uuid
 from typing import Annotated
 
@@ -6,84 +11,72 @@ from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile, s
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from auth import get_current_seller
+from auth import require_admin
 from database import get_db
-from models import Product, Seller, SellerStatus
+from models import Product, Seller
 from schemas import (
-    SellerOut,
     SellerProductIn,
     SellerProductOut,
     SellerProductPatch,
-    SellerProfileIn,
+    StoreSettingsIn,
+    StoreSettingsOut,
     UploadOut,
 )
 from services.catalog import MAX_UPLOAD_BYTES, save_product_image, unique_slug
 
-router = APIRouter(prefix="/api/seller", tags=["Vendedor"])
+HOUSE_STORE_SLUG = "tiendavzla"
+
+router = APIRouter(prefix="/api/admin", tags=["Admin · Tienda"], dependencies=[Depends(require_admin)])
 
 DbSession = Annotated[Session, Depends(get_db)]
-CurrentSeller = Annotated[Seller, Depends(get_current_seller)]
 
 # Campos que una edición no puede dejar vacíos.
 REQUIRED_FIELDS = {"name", "price_usd", "shipping_cost_usd", "stock", "image_url", "is_active"}
 
 
-def _writable(seller: Seller) -> Seller:
-    """Una tienda suspendida no puede editar su catálogo."""
-    if seller.status == SellerStatus.SUSPENDED:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tu tienda está suspendida. Escríbenos para revisarlo.",
-        )
-    return seller
+def get_store(db: DbSession) -> Seller:
+    store = db.scalar(select(Seller).where(Seller.slug == HOUSE_STORE_SLUG))
+    if store is None:  # la crea la migración 0005; si falta, la base está incompleta
+        raise HTTPException(status_code=500, detail="Falta la tienda principal. Corre `alembic upgrade head`.")
+    return store
 
 
-def _own_product(db: Session, seller: Seller, product_id: uuid.UUID) -> Product:
-    product = db.scalar(
-        select(Product).where(Product.id == product_id, Product.seller_id == seller.id)
-    )
-    if product is None:  # tampoco se revela si existe en otra tienda
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
-    return product
+Store = Annotated[Seller, Depends(get_store)]
 
 
-# ---------- Tienda ----------
+# ---------- Configuración ----------
 
 
-@router.get("/me", response_model=SellerOut)
-def my_store(seller: CurrentSeller) -> SellerOut:
-    return SellerOut.model_validate(seller)
+@router.get("/store", response_model=StoreSettingsOut)
+def store_settings(store: Store) -> StoreSettingsOut:
+    return StoreSettingsOut.model_validate(store)
 
 
-@router.put("/me", response_model=SellerOut)
-def update_my_store(payload: SellerProfileIn, seller: CurrentSeller, db: DbSession) -> SellerOut:
-    """Edita nombre, WhatsApp y datos de Pago Móvil (el enlace de la tienda no cambia)."""
-    _writable(seller)
+@router.put("/store", response_model=StoreSettingsOut)
+def update_store_settings(payload: StoreSettingsIn, store: Store, db: DbSession) -> StoreSettingsOut:
+    """Nombre, WhatsApp y datos de Pago Móvil que ven los clientes al pagar."""
     for field, value in payload.model_dump().items():
-        setattr(seller, field, value)
+        setattr(store, field, value)
     db.commit()
-    return SellerOut.model_validate(seller)
+    return StoreSettingsOut.model_validate(store)
 
 
 # ---------- Productos ----------
 
 
 @router.get("/products", response_model=list[SellerProductOut])
-def my_products(seller: CurrentSeller, db: DbSession) -> list[SellerProductOut]:
-    """Todos los productos de la tienda, publicados u ocultos."""
+def list_products(store: Store, db: DbSession) -> list[SellerProductOut]:
+    """Todos los productos, publicados u ocultos."""
     products = db.scalars(
-        select(Product).where(Product.seller_id == seller.id).order_by(Product.created_at.desc())
+        select(Product).where(Product.seller_id == store.id).order_by(Product.created_at.desc())
     ).all()
     return [SellerProductOut.model_validate(p) for p in products]
 
 
 @router.post("/products", response_model=SellerProductOut, status_code=status.HTTP_201_CREATED)
-def create_product(
-    payload: SellerProductIn, seller: CurrentSeller, db: DbSession
-) -> SellerProductOut:
-    _writable(seller)
+def create_product(payload: SellerProductIn, store: Store, db: DbSession) -> SellerProductOut:
     product = Product(
-        seller=seller,
+        seller=store,
         slug=unique_slug(db, Product.slug, payload.name),
         **payload.model_dump(),
     )
@@ -97,13 +90,13 @@ def create_product(
 def update_product(
     product_id: Annotated[uuid.UUID, Path()],
     payload: SellerProductPatch,
-    seller: CurrentSeller,
     db: DbSession,
 ) -> SellerProductOut:
     """Cambia solo los campos enviados. Para "borrar" un producto se oculta
     (isActive=false), porque las órdenes viejas lo siguen referenciando."""
-    _writable(seller)
-    product = _own_product(db, seller, product_id)
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
     for field, value in payload.model_dump(exclude_unset=True).items():
         if value is None and field in REQUIRED_FIELDS:
             continue
@@ -118,10 +111,8 @@ def update_product(
 
 @router.post("/uploads", response_model=UploadOut, status_code=status.HTTP_201_CREATED)
 async def upload_image(
-    seller: CurrentSeller,
     file: Annotated[UploadFile, File(description="Imagen JPG, PNG o WebP de hasta 5 MB")],
 ) -> UploadOut:
-    _writable(seller)
     data = await file.read(MAX_UPLOAD_BYTES + 1)
     try:
         url = save_product_image(data)

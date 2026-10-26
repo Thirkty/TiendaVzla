@@ -1,17 +1,16 @@
-// Campos de la tienda (nombre, WhatsApp y Pago Móvil), usados en el registro y en
-// "Mi tienda" del panel del vendedor.
-import type { SellerProfileInput } from "@/lib/api/types";
+// Campos de la configuración de la tienda (nombre, WhatsApp y Pago Móvil).
+import type { StoreSettings } from "@/lib/api/types";
 import { VENEZUELA_BANKS } from "@/lib/banks";
 import { Field, inputClass } from "@/components/ui/form";
 
 interface StoreProfileFieldsProps {
-  values: SellerProfileInput;
+  values: StoreSettings;
   errors: Record<string, string>;
-  onChange: (field: keyof SellerProfileInput, value: string) => void;
+  onChange: (field: keyof StoreSettings, value: string) => void;
 }
 
 export default function StoreProfileFields({ values, errors, onChange }: StoreProfileFieldsProps) {
-  const input = (field: keyof SellerProfileInput) => ({
+  const input = (field: keyof StoreSettings) => ({
     id: field,
     value: values[field],
     onChange: (e: { target: { value: string } }) => onChange(field, e.target.value),
@@ -28,13 +27,13 @@ export default function StoreProfileFields({ values, errors, onChange }: StorePr
         id="whatsapp"
         label="WhatsApp de la tienda"
         error={errors.whatsapp}
-        hint="Aquí te escriben los clientes y te avisamos de los pedidos"
+        hint="Aquí te escriben los clientes"
       >
         <input {...input("whatsapp")} type="tel" inputMode="tel" placeholder="0414 1234567" />
       </Field>
 
       <fieldset className="space-y-4 rounded-2xl border border-line p-4">
-        <legend className="px-1 text-sm font-bold">Pago Móvil donde recibes los pagos</legend>
+        <legend className="px-1 text-sm font-bold">Pago Móvil donde reciben los pagos</legend>
         <Field id="pagoMovilBank" label="Banco" error={errors.pagoMovilBank}>
           <select {...input("pagoMovilBank")}>
             <option value="" disabled>

@@ -1,9 +1,9 @@
 "use client";
-// OrderCard: un pedido en el panel del vendedor o del admin. Datos de envío, monto,
+// OrderCard: un pedido en el panel de admin. Datos de envío, monto,
 // referencia del Pago Móvil, despacho (agencia y guía) y botones para el siguiente estado.
 
 import { useState, type FormEvent } from "react";
-import { Loader2, MapPin, MessageCircle, Store, Truck } from "lucide-react";
+import { Loader2, MapPin, MessageCircle, Truck } from "lucide-react";
 import type { OrderStatus, SellerOrder } from "@/lib/api/types";
 import {
   CARRIERS,
@@ -17,8 +17,6 @@ import { formatBs, formatUsd } from "@/lib/utils/format";
 
 interface OrderCardProps {
   order: SellerOrder;
-  /** El admin ve de qué tienda es cada pedido. */
-  showSeller?: boolean;
   onChangeStatus: (order: SellerOrder, to: OrderStatus, extra?: StatusChangeExtra) => Promise<void>;
 }
 
@@ -43,7 +41,7 @@ function whatsappLink(phone: string): string {
 
 type Panel = "actions" | "cancel" | "ship";
 
-export default function OrderCard({ order, showSeller = false, onChangeStatus }: OrderCardProps) {
+export default function OrderCard({ order, onChangeStatus }: OrderCardProps) {
   const [busy, setBusy] = useState<OrderStatus | null>(null);
   const [panel, setPanel] = useState<Panel>("actions");
   const [reason, setReason] = useState("");
@@ -90,12 +88,6 @@ export default function OrderCard({ order, showSeller = false, onChangeStatus }:
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[order.status]}`}>
             {STATUS_LABEL[order.status]}
           </span>
-          {showSeller && (
-            <span className="inline-flex items-center gap-1 text-sm text-ink/60">
-              <Store className="size-3.5" />
-              {order.seller.storeName}
-            </span>
-          )}
         </div>
         <time className="text-sm text-ink/50" dateTime={order.createdAt}>
           {dateFormatter.format(new Date(order.createdAt))}

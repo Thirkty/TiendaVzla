@@ -1,9 +1,8 @@
 "use client";
 // CheckoutFlow: orquesta los tres pasos del checkout.
-//   1. Datos  -> crea una orden PENDING por vendedor y vacía el carrito.
-//   2. Pago   -> un Pago Móvil por vendedor, cada uno con su referencia
-//                (PAYMENT_SUBMITTED). Vencen si no se pagan a tiempo.
-//   3. Listo  -> cada vendedor verifica su pago y despacha.
+//   1. Datos  -> crea la orden PENDING (una por tienda; hoy hay una sola) y vacía el carrito.
+//   2. Pago   -> Pago Móvil + referencia (PAYMENT_SUBMITTED). Vence si no se paga a tiempo.
+//   3. Listo  -> la tienda verifica el pago desde /admin y despacha.
 // Las órdenes pendientes se guardan en sessionStorage para no perderlas al recargar.
 
 import { useEffect, useState } from "react";
@@ -31,7 +30,7 @@ function readPendingOrders(): Order[] | null {
   try {
     const raw = sessionStorage.getItem(PENDING_ORDER_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : null;
-    // Formato anterior (una sola orden sin vendedor): se descarta.
+    // Formato anterior (una sola orden, no una lista): se descarta.
     return Array.isArray(parsed) ? (parsed as Order[]) : null;
   } catch {
     return null;
@@ -194,8 +193,7 @@ function OrdersConfirmed({ orders }: { orders: Order[] }) {
         {orders.length > 1 ? "¡Recibimos tus referencias!" : "¡Recibimos tu referencia!"}
       </h2>
       <p className="mt-2 text-ink/60">
-        {orders.length > 1 ? "Cada vendedor verifica su pago" : "El vendedor verifica el pago"} en el
-        banco y te escribe por WhatsApp para coordinar el envío.
+        Verificamos tu pago en el banco y te escribimos por WhatsApp para coordinar el envío.
       </p>
 
       <ul className="mt-6 w-full space-y-3 text-left">

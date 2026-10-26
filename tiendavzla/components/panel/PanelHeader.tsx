@@ -1,44 +1,17 @@
-// PanelHeader: barra superior de los paneles (admin y vendedor) con enlace a la tienda,
-// accesos entre paneles y botón de salir.
+// PanelHeader: barra superior del panel de admin con enlace a la tienda y botón de salir.
 import Link from "next/link";
 import { LogOut, Store } from "lucide-react";
 import type { Me } from "@/lib/api/types";
 
-interface PanelHeaderProps {
-  me: Me;
-  current: "admin" | "vendedor";
-  onLogout: () => void;
-}
-
-export default function PanelHeader({ me, current, onLogout }: PanelHeaderProps) {
-  const links = [
-    me.isAdmin && { href: "/admin", label: "Admin", key: "admin" },
-    me.seller && { href: "/vendedor", label: "Mi tienda", key: "vendedor" },
-  ].filter(Boolean) as { href: string; label: string; key: string }[];
-
+export default function PanelHeader({ me, onLogout }: { me: Me; onLogout: () => void }) {
   return (
     <header className="border-b border-line bg-white">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Link href="/" className="text-lg font-extrabold tracking-tight text-brand">
             TiendaVzla
           </Link>
-          {links.length > 1 && (
-            <nav className="flex gap-1">
-              {links.map((link) => (
-                <Link
-                  key={link.key}
-                  href={link.href}
-                  aria-current={link.key === current ? "page" : undefined}
-                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                    link.key === current ? "bg-deep text-white" : "text-ink/60 hover:bg-line/60"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          )}
+          <span className="rounded-md bg-ink px-2 py-0.5 text-xs font-semibold text-white">Admin</span>
         </div>
         <div className="flex items-center gap-1">
           <span className="hidden text-sm text-ink/50 sm:inline">{me.email}</span>

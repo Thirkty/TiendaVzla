@@ -1,5 +1,5 @@
 // Cliente para los endpoints que usan la sesión (cookie httpOnly que pone la API):
-// cuentas, panel del vendedor y panel de admin. Todas las llamadas van con
+// cuentas y panel de admin. Todas las llamadas van con
 // credentials: "include" para que el navegador envíe la cookie.
 import { API_URL } from "./client";
 import type { Me } from "./types";
@@ -60,16 +60,6 @@ export async function sessionFetch<T>(
 
 /* ---------- Cuentas ---------- */
 
-export interface SellerRegistration {
-  email: string;
-  password: string;
-  storeName: string;
-  whatsapp: string;
-  pagoMovilBank: string;
-  pagoMovilPhone: string;
-  pagoMovilId: string;
-}
-
 export const accountApi = {
   /** Usuario conectado, o null si no hay sesión. */
   me: async (): Promise<Me | null> => {
@@ -83,13 +73,9 @@ export const accountApi = {
   login: (email: string, password: string) =>
     sessionFetch<Me>("/api/auth/login", { json: { email, password } }),
   logout: () => sessionFetch<void>("/api/auth/logout", { method: "POST" }),
-  registerSeller: (data: SellerRegistration) =>
-    sessionFetch<Me>("/api/auth/register-seller", { json: data }),
 };
 
 /** A dónde mandar al usuario después de entrar. */
 export function homeFor(me: Me): string {
-  if (me.isAdmin) return "/admin";
-  if (me.seller) return "/vendedor";
-  return "/";
+  return me.isAdmin ? "/admin" : "/";
 }

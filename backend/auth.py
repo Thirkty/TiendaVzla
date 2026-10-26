@@ -1,5 +1,5 @@
 """Cuentas y sesiones: contraseñas con Argon2, sesión en cookie httpOnly y dependencias
-para proteger endpoints (usuario conectado, admin, vendedor).
+para proteger endpoints (usuario conectado, admin).
 
 La cookie solo lleva un token aleatorio; en la base se guarda su hash SHA-256, así una
 copia de la base no sirve para entrar. Cerrar sesión borra la fila.
@@ -17,7 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from database import COOKIE_SECURE, SESSION_DAYS, get_db
-from models import Seller, User, UserSession
+from models import User, UserSession
 
 SESSION_COOKIE = "tvz_session"
 MIN_PASSWORD_LENGTH = 8
@@ -139,13 +139,6 @@ def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo para administradores")
     return user
-
-
-def get_current_seller(user: Annotated[User, Depends(get_current_user)]) -> Seller:
-    """Tienda del usuario conectado (pendiente, activa o suspendida)."""
-    if user.seller is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Esta cuenta no tiene tienda")
-    return user.seller
 
 
 def client_key(request: Request, email: str) -> str:

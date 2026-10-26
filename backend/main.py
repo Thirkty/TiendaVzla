@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from database import BCV_AUTO_UPDATE, CORS_ORIGINS, RATE_REFRESH_HOURS, SessionLocal, engine
-from routers import accounts, admin_sellers, orders, products, rates, seller, seller_orders
+from routers import accounts, admin_catalog, orders, products, rates
 from services.catalog import UPLOAD_PATH
 from services.orders import expire_pending_orders
 from services.rates import refresh_official_rate
@@ -67,7 +67,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="TiendaVzla API",
-    description="Backend del marketplace TiendaVzla: vendedores, catálogo, pedidos y tasa BCV.",
+    description="Backend de TiendaVzla: catálogo, pedidos, pagos por Pago Móvil y tasa BCV.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -84,11 +84,9 @@ app.include_router(products.router)
 app.include_router(orders.router)
 app.include_router(rates.router)
 app.include_router(accounts.router)
-app.include_router(seller.router)
-app.include_router(seller_orders.router)
-app.include_router(admin_sellers.router)
+app.include_router(admin_catalog.router)
 
-# Imágenes subidas por los vendedores (en producción conviene servirlas desde un CDN).
+# Fotos de productos subidas desde el panel (en producción conviene servirlas desde un CDN).
 app.mount("/uploads", StaticFiles(directory=UPLOAD_PATH), name="uploads")
 
 

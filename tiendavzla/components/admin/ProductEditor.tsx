@@ -1,17 +1,17 @@
 "use client";
-// ProductEditor: crear o editar un producto del vendedor, con subida de foto.
+// ProductEditor: crear o editar un producto de la tienda, con subida de foto.
 
 import { useRef, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { ImagePlus, Loader2, X } from "lucide-react";
-import { sellerApi } from "@/lib/api/seller";
+import { adminApi } from "@/lib/api/admin";
 import { SessionApiError } from "@/lib/api/session";
-import type { SellerProduct, SellerProductInput } from "@/lib/api/types";
+import type { AdminProduct, ProductInput } from "@/lib/api/types";
 import { Field, FormError, inputClass, primaryButton, secondaryButton } from "@/components/ui/form";
 
 interface ProductEditorProps {
-  product: SellerProduct | null; // null = nuevo
-  onSaved: (product: SellerProduct) => void;
+  product: AdminProduct | null; // null = nuevo
+  onSaved: (product: AdminProduct) => void;
   onClose: () => void;
 }
 
@@ -28,7 +28,7 @@ interface Draft {
   isActive: boolean;
 }
 
-const toDraft = (p: SellerProduct | null): Draft => ({
+const toDraft = (p: AdminProduct | null): Draft => ({
   name: p?.name ?? "",
   description: p?.description ?? "",
   priceUsd: p ? String(p.priceUsd) : "",
@@ -62,7 +62,7 @@ export default function ProductEditor({ product, onSaved, onClose }: ProductEdit
     setUploading(true);
     setErrors((e) => ({ ...e, imageUrl: "" }));
     try {
-      const { url } = await sellerApi.uploadImage(file);
+      const { url } = await adminApi.uploadImage(file);
       set("imageUrl", url);
     } catch (err) {
       setErrors((e) => ({
@@ -94,7 +94,7 @@ export default function ProductEditor({ product, onSaved, onClose }: ProductEdit
       return;
     }
 
-    const data: SellerProductInput = {
+    const data: ProductInput = {
       name: draft.name.trim(),
       description: draft.description.trim(),
       priceUsd: price,
@@ -110,7 +110,7 @@ export default function ProductEditor({ product, onSaved, onClose }: ProductEdit
     setSaving(true);
     setFormError(null);
     try {
-      onSaved(product ? await sellerApi.updateProduct(product.id, data) : await sellerApi.createProduct(data));
+      onSaved(product ? await adminApi.updateProduct(product.id, data) : await adminApi.createProduct(data));
     } catch (err) {
       if (err instanceof SessionApiError) {
         setErrors(err.fieldErrors);

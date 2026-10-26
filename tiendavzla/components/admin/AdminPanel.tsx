@@ -1,7 +1,8 @@
 "use client";
-// AdminPanel: requiere sesión de admin. Dos secciones:
+// AdminPanel: requiere sesión de admin. Tres secciones:
 //   - Pedidos: tasa BCV y pedidos por estado ("Por verificar" es el trabajo diario).
-//   - Vendedores: revisar registros, aprobar y suspender tiendas.
+//   - Productos: alta y edición del catálogo, con fotos.
+//   - Configuración: nombre, WhatsApp y Pago Móvil de la tienda.
 // Los pedidos se refrescan solos cada 30 segundos.
 
 import { useCallback, useEffect, useState } from "react";
@@ -15,11 +16,12 @@ import PanelHeader from "@/components/panel/PanelHeader";
 import { useRequireSession } from "@/components/panel/useRequireSession";
 import OrderCard from "@/components/orders/OrderCard";
 import RateCard from "./RateCard";
-import SellersAdmin from "./SellersAdmin";
+import ProductsAdmin from "./ProductsAdmin";
+import StoreSettingsForm from "./StoreSettingsForm";
 
 const REFRESH_MS = 30_000;
 
-type Section = "orders" | "sellers";
+type Section = "orders" | "products" | "settings";
 
 export default function AdminPanel() {
   const { me, error, reload, logout } = useRequireSession();
@@ -49,13 +51,14 @@ export default function AdminPanel() {
 
   return (
     <>
-      <PanelHeader me={me} current="admin" onLogout={logout} />
+      <PanelHeader me={me} onLogout={logout} />
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <nav className="flex gap-2" aria-label="Secciones del panel">
           {(
             [
               ["orders", "Pedidos"],
-              ["sellers", "Vendedores"],
+              ["products", "Productos"],
+              ["settings", "Configuración"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -73,7 +76,9 @@ export default function AdminPanel() {
         </nav>
 
         <div className="mt-6">
-          {section === "orders" ? <OrdersSection onApiError={onApiError} /> : <SellersAdmin onApiError={onApiError} />}
+          {section === "orders" && <OrdersSection onApiError={onApiError} />}
+          {section === "products" && <ProductsAdmin onApiError={onApiError} />}
+          {section === "settings" && <StoreSettingsForm onApiError={onApiError} />}
         </div>
       </div>
     </>
@@ -179,7 +184,7 @@ function OrdersSection({ onApiError }: { onApiError: (err: unknown) => void }) {
           </p>
         ) : (
           orders.map((order) => (
-            <OrderCard key={order.id} order={order} showSeller onChangeStatus={changeStatus} />
+            <OrderCard key={order.id} order={order} onChangeStatus={changeStatus} />
           ))
         )}
       </div>

@@ -1,8 +1,7 @@
 "use client";
-// LoginForm: entrada de vendedores y admins. Si ya hay sesión, redirige a su panel.
+// LoginForm: entrada al panel de admin. Si ya hay sesión, redirige al panel.
 
 import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { accountApi, homeFor, SessionApiError } from "@/lib/api/session";
@@ -43,7 +42,7 @@ export default function LoginForm() {
   return (
     <div className="mx-auto max-w-sm px-4 py-16">
       <h1 className="text-3xl font-bold tracking-tight">Entrar</h1>
-      <p className="mt-1 text-ink/60">Para vendedores y administradores de TiendaVzla.</p>
+      <p className="mt-1 text-ink/60">Panel de administración de TiendaVzla.</p>
 
       <form onSubmit={submit} className="mt-8 space-y-4">
         <Field id="email" label="Correo">
@@ -75,12 +74,6 @@ export default function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-8 text-center text-sm text-ink/60">
-        ¿Quieres vender en TiendaVzla?{" "}
-        <Link href="/vender" className="font-semibold text-brand hover:underline">
-          Abre tu tienda
-        </Link>
-      </p>
     </div>
   );
 }

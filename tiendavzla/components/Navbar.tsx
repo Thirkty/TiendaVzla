@@ -12,7 +12,6 @@ const NAV_LINKS: ReadonlyArray<{ label: string; href: string }> = [
   { label: "Catálogo", href: "/#catalogo" },
   { label: "Envíos", href: "/#envios" },
   { label: "Contacto", href: "/#contacto" },
-  { label: "Vender", href: "/vender" },
 ];
 
 export default function Navbar() {

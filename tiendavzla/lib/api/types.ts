@@ -152,11 +152,10 @@ export interface RateStatus {
   lastCheck: { at: string; ok: boolean; source: string | null; error: string | null } | null;
 }
 
-/* ---------- Cuentas y vendedores ---------- */
+/* ---------- Cuentas y panel de admin ---------- */
 
-export type SellerStatus = "PENDING" | "ACTIVE" | "SUSPENDED";
-
-export interface SellerProfileInput {
+/** Configuración de la tienda: lo que ve el cliente para pagar y escribir. */
+export interface StoreSettings {
   storeName: string;
   whatsapp: string;
   pagoMovilBank: string;
@@ -164,28 +163,13 @@ export interface SellerProfileInput {
   pagoMovilId: string;
 }
 
-export interface SellerProfile extends SellerProfileInput {
-  id: string;
-  slug: string;
-  status: SellerStatus;
-  statusNote: string | null;
-  createdAt: string;
-  approvedAt: string | null;
-}
-
 export interface Me {
   id: string;
   email: string;
   isAdmin: boolean;
-  seller: SellerProfile | null;
 }
 
-export interface AdminSeller extends SellerProfile {
-  email: string | null;
-  productsCount: number;
-}
-
-export interface SellerProductInput {
+export interface ProductInput {
   name: string;
   description: string;
   priceUsd: number;
@@ -198,7 +182,7 @@ export interface SellerProductInput {
   isActive: boolean;
 }
 
-export interface SellerProduct extends Product {
+export interface AdminProduct extends Product {
   isActive: boolean;
   shippingCostUsd: number;
   updatedAt: string | null;
